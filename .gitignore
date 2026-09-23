@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+build/
+.cache/
+artifacts/
+apps/desktop/src-tauri/resources/runtime/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store

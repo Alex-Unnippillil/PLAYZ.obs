@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-09-23",
+  "obs": {
+    "version": "32.2.2",
+    "runtime_url": "https://github.com/obsproject/obs-studio/releases/download/32.2.2/OBS-Studio-32.2.2-Windows-x64.zip",
+    "runtime_sha256": "4d6e40e3ab155f56b30de517380566a206d74b63cdf5ad49aa596924768f97e1",
+    "source_url": "https://github.com/obsproject/obs-studio/releases/download/32.2.2/OBS-Studio-32.2.2-Sources.tar.gz",
+    "source_sha256": "ec81fb66b03e75ddb3076b576f62679c39262e0e9960cef3e17a40dc5d68e6b4",
+    "license": "GPL-2.0-or-later; bundled dependencies retain their licenses"
+  },
+  "ffmpeg": {
+    "version": "9.0.2",
+    "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
+    "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+    "upstream": "https://ffmpeg.org/",
+    "builder": "https://www.gyan.dev/ffmpeg/builds/",
+    "license": "GPL build; exact -L and -buildconf must be included in build evidence"
+  },
+  "nlohmann_json": {
+    "version": "3.12.0",
+    "repository": "https://github.com/nlohmann/json.git",
+    "commit": "55f93686c01528224f448c19128836e7df245f72",
+    "license": "MIT"
+  }
+}

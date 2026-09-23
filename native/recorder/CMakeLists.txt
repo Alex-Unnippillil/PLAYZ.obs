@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.28)
+project(playz_recorder VERSION 0.1.0 LANGUAGES CXX)
+if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  message(FATAL_ERROR "PLAYZ recorder requires Windows x64 and MSVC")
+endif()
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(OBS_SOURCE_DIR "" CACHE PATH "Verified OBS 32.2.2 source directory")
+set(OBS_RUNTIME_DIR "" CACHE PATH "Verified OBS portable root")
+set(JSON_INCLUDE_DIR "" CACHE PATH "Verified nlohmann single_include directory")
+if(NOT EXISTS "${OBS_SOURCE_DIR}/libobs/obs.h" OR NOT EXISTS "${OBS_RUNTIME_DIR}/bin/64bit/obs.dll")
+  message(FATAL_ERROR "Run scripts/bootstrap.ps1 -Native first")
+endif()
+# Generate an import library from the exact shipped DLL instead of linking an
+# unrelated SDK build. The public headers are from the same pinned release.
+execute_process(COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/obs-import-lib.ps1"
+  -Dll "${OBS_RUNTIME_DIR}/bin/64bit/obs.dll" -Output "${CMAKE_CURRENT_BINARY_DIR}/obs.lib"
+  RESULT_VARIABLE import_result)
+if(NOT import_result EQUAL 0)
+  message(FATAL_ERROR "Could not generate OBS import library")
+endif()
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/obsconfig.h"
+  "#pragma once\n#define OBS_VERSION \"32.2.2\"\n#define OBS_VERSION_CANONICAL \"32.2.2\"\n#define OBS_INSTALL_PREFIX \".\"\n#define OBS_DATA_PATH \"data\"\n#define OBS_PLUGIN_DESTINATION \"obs-plugins/64bit\"\n#define OBS_RELATIVE_PREFIX \"../../\"\n")
+add_executable(playz-recorder main.cpp)
+target_include_directories(playz-recorder PRIVATE "${OBS_SOURCE_DIR}/libobs" "${CMAKE_CURRENT_BINARY_DIR}" "${JSON_INCLUDE_DIR}")
+target_compile_definitions(playz-recorder PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
+target_compile_options(playz-recorder PRIVATE /W4 /EHsc /utf-8 /permissive-)
+target_link_libraries(playz-recorder PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/obs.lib" ole32 user32)
+set_target_properties(playz-recorder PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OBS_RUNTIME_DIR}/bin/64bit")
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+  set_target_properties(playz-recorder PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${config} "${OBS_RUNTIME_DIR}/bin/64bit")
+endforeach()
+enable_testing()
+add_test(NAME recorder_protocol COMMAND "$<TARGET_FILE:playz-recorder>" --self-test)
+set_tests_properties(recorder_protocol PROPERTIES WORKING_DIRECTORY "${OBS_RUNTIME_DIR}/bin/64bit")

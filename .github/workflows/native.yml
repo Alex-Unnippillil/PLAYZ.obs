@@ -1,0 +1,40 @@
+name: Native recorder
+on:
+  push:
+    branches: [main, work/local-recorder]
+    paths: ['native/**', 'scripts/bootstrap.ps1', 'scripts/obs-import-lib.ps1', 'third_party/native-lock.json', '.github/workflows/native.yml']
+  pull_request:
+    paths: ['native/**', 'scripts/bootstrap.ps1', 'scripts/obs-import-lib.ps1', 'third_party/native-lock.json', '.github/workflows/native.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Build original libobs host and test protocol
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1 -Native
+      - name: Package native evidence
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          git rev-parse HEAD | Out-File artifacts/commit.txt
+          if (Test-Path build/native/Testing) { Copy-Item build/native/Testing artifacts/NativeTests -Recurse }
+          if (Test-Path apps/desktop/src-tauri/resources/runtime/provenance.json) { Copy-Item apps/desktop/src-tauri/resources/runtime/provenance.json artifacts/native-provenance.json }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-evidence
+          path: artifacts/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-native-runtime
+          path: apps/desktop/src-tauri/resources/runtime/
+          retention-days: 7
