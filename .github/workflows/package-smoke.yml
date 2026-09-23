@@ -2,7 +2,7 @@ name: Smoke test an existing unsigned package
 on:
   push:
     branches: [work/local-recorder]
-    paths: [.github/workflows/package-smoke.yml]
+    paths: ['.github/workflows/package-smoke.yml', 'scripts/test-installed*.ps1']
   workflow_dispatch:
     inputs:
       artifact_id:

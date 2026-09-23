@@ -1,18 +1,21 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Developer/CI-only UI Automation smoke test. Run with Windows PowerShell 5.1 -STA.
-param([Parameter(Mandatory)][string]$Executable, [Parameter(Mandatory)][string]$EvidenceDirectory)
+# Developer/CI-only UI Automation. Use Windows PowerShell 5.1 -STA.
+param([Parameter(Mandatory)][string]$Executable, [Parameter(Mandatory)][string]$EvidenceDirectory, [Parameter(Mandatory)][string]$MediaFile)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
 $executablePath = (Resolve-Path $Executable).Path
+$mediaPath = (Resolve-Path $MediaFile).Path
 New-Item -ItemType Directory -Force $EvidenceDirectory | Out-Null
 $script:appProcess = $null
 $script:window = $null
+function Named-Condition([string]$Name) {
+  [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $Name)
+}
 function Find-Control([string]$Name) {
-  $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $Name)
-  $script:window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+  $script:window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (Named-Condition $Name))
 }
 function Wait-Control([string]$Name) {
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
@@ -24,11 +27,16 @@ function Wait-Control([string]$Name) {
   } while ([DateTime]::UtcNow -lt $deadline)
   throw "Installed UI did not expose expected control: $Name"
 }
-function Invoke-Control([string]$Name) {
-  $control = Wait-Control $Name
-  $pattern = $control.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+function Invoke-Element($Control) {
+  $deadline = [DateTime]::UtcNow.AddSeconds(30)
+  while (-not $Control.Current.IsEnabled) {
+    if ([DateTime]::UtcNow -ge $deadline) { throw "Control did not become enabled: $($Control.Current.Name)" }
+    Start-Sleep -Milliseconds 200
+  }
+  $pattern = $Control.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
   ([System.Windows.Automation.InvokePattern]$pattern).Invoke()
 }
+function Invoke-Control([string]$Name) { Invoke-Element (Wait-Control $Name) }
 function Open-App {
   $script:appProcess = Start-Process -FilePath $executablePath -PassThru
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
@@ -37,7 +45,8 @@ function Open-App {
     if ($script:appProcess.HasExited) { throw "Installed executable exited with $($script:appProcess.ExitCode)" }
     if ($script:appProcess.MainWindowHandle -ne [IntPtr]::Zero) {
       $script:window = [System.Windows.Automation.AutomationElement]::FromHandle($script:appProcess.MainWindowHandle)
-      $script:window.SetFocus()
+      # Top-level window elements need not implement keyboard focus. InvokePattern
+      # does not require forcing focus onto that non-focusable container.
       Wait-Control 'Your recordings' | Out-Null
       return
     }
@@ -54,17 +63,55 @@ function Save-Window([string]$Name) {
     $image.Save((Join-Path $EvidenceDirectory "$Name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
   } finally { $graphics.Dispose(); $image.Dispose() }
 }
+function Import-Fixture {
+  Invoke-Control 'Import video'
+  $deadline = [DateTime]::UtcNow.AddSeconds(30)
+  $dialog = $null
+  do {
+    $dialog = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children, (Named-Condition 'Import local H.264 / AAC media'))
+    if ($null -ne $dialog) { break }
+    Start-Sleep -Milliseconds 200
+  } while ([DateTime]::UtcNow -lt $deadline)
+  if ($null -eq $dialog) { throw 'Native import file picker did not open' }
+  $editType = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+  $condition = [System.Windows.Automation.AndCondition]::new((Named-Condition 'File name:'), $editType)
+  $filename = $dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+  if ($null -eq $filename) { throw 'Native file picker filename edit was not accessible' }
+  $value = [System.Windows.Automation.ValuePattern]$filename.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+  $value.SetValue($mediaPath)
+  $open = $dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (Named-Condition 'Open'))
+  Invoke-Element $open
+  Wait-Control 'Make a clip' | Out-Null
+}
+function Verify-Playback {
+  Invoke-Control 'Preview interval'
+  $deadline = [DateTime]::UtcNow.AddSeconds(15)
+  do {
+    $items = $script:window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+    foreach ($item in $items) {
+      $name = $item.Current.Name
+      if ($name -match '^00:0[1-9]\s*/\s*00:0[1-9]$') { Save-Window 'playing-import'; return }
+    }
+    Start-Sleep -Milliseconds 150
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw 'The packaged HTML video playhead did not advance on the real MP4 playback asset'
+}
 try {
   Open-App
   Save-Window 'library'
   Invoke-Control 'Capture settings'
-  # This section is rendered only after a real app_state command has returned.
   Wait-Control 'Video source' | Out-Null
   Wait-Control 'Recording folder' | Out-Null
   Save-Window 'capture-settings'
   Invoke-Control 'Diagnostics'
   Wait-Control 'Consistent library backup' | Out-Null
   Save-Window 'diagnostics'
+  Invoke-Control 'Library'
+  Import-Fixture
+  Verify-Playback
+  Invoke-Control 'Queue export'
+  Wait-Control 'Show clip' | Out-Null
+  Save-Window 'completed-ui-export'
   $second = Start-Process -FilePath $executablePath -PassThru
   try { if (-not $second.WaitForExit(15000)) { throw 'Second launch did not hand off to the existing instance' } } finally { $second.Dispose() }
   if (@(Get-Process -Name PLAYZ -ErrorAction SilentlyContinue).Count -ne 1) { throw 'Expected exactly one PLAYZ instance' }
@@ -72,9 +119,20 @@ try {
   if (-not $script:appProcess.WaitForExit(20000)) { throw 'Safe quit did not finish' }
   $script:appProcess.Dispose(); $script:appProcess = $null
   Open-App
+  Wait-Control ('Open ' + [IO.Path]::GetFileNameWithoutExtension($mediaPath)) | Out-Null
+  Save-Window 'persisted-library'
   Invoke-Control 'Quit safely'
   if (-not $script:appProcess.WaitForExit(20000)) { throw 'Restarted application did not quit' }
-  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; diagnostics_view = $true; single_instance = $true; safe_idle_quit_restart = $true; classification = 'Hosted packaged smoke test, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
+  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; diagnostics_view = $true; native_picker_import = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
+} catch {
+  if ($null -ne $script:window) {
+    try {
+      Save-Window 'failure'
+      $controls = $script:window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+      @($controls | Select-Object -First 300 | ForEach-Object { [ordered]@{ name = $_.Current.Name; control = $_.Current.ControlType.ProgrammaticName; enabled = $_.Current.IsEnabled } }) | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'failure-controls.json')
+    } catch { Write-Warning 'Could not collect all failure diagnostics' }
+  }
+  throw
 } finally {
   if ($null -ne $script:appProcess) {
     if (-not $script:appProcess.HasExited) { Stop-Process -Id $script:appProcess.Id -Force }
