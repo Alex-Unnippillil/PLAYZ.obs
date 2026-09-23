@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Developer/CI-only UI Automation. Use Windows PowerShell 5.1 -STA.
+# Developer/CI-only UI Automation. Use test-installed-host.ps1 (Windows PS 5.1).
 param([Parameter(Mandatory)][string]$Executable, [Parameter(Mandatory)][string]$EvidenceDirectory, [Parameter(Mandatory)][string]$MediaFile)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -47,7 +47,6 @@ function Open-App {
     if ($script:appProcess.HasExited) { throw "Installed executable exited with $($script:appProcess.ExitCode)" }
     if ($script:appProcess.MainWindowHandle -ne [IntPtr]::Zero) {
       $script:window = [System.Windows.Automation.AutomationElement]::FromHandle($script:appProcess.MainWindowHandle)
-      # InvokePattern does not require focus on the non-focusable window container.
       Wait-Control 'Your recordings' | Out-Null
       return
     }
@@ -78,32 +77,15 @@ function Import-Fixture {
     Start-Sleep -Milliseconds 200
   } while ([DateTime]::UtcNow -lt $deadline)
   if ($null -eq $script:picker) { throw 'Native import file picker did not open' }
-  # A native dialog can exist before its child provider is ready. The filename
-  # is a ComboBox on some Windows builds and its Edit child on others.
-  $value = $null
+  Save-Controls $script:picker 'native-picker-controls'
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
+  $accepted = $false
   do {
-    $controls = $script:picker.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-    foreach ($control in $controls) {
-      $type = $control.Current.ControlType
-      $name = $control.Current.Name.Trim().TrimEnd(':')
-      $id = $control.Current.AutomationId
-      if (($type -eq [System.Windows.Automation.ControlType]::Edit -or $type -eq [System.Windows.Automation.ControlType]::ComboBox) -and ($name -eq 'File name' -or $id -eq '1148' -or $id -eq '1001')) {
-        $candidate = $null
-        if ($control.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$candidate)) {
-          $typed = [System.Windows.Automation.ValuePattern]$candidate
-          if (-not $typed.Current.IsReadOnly -and $control.Current.IsEnabled) { $value = $typed; break }
-        }
-      }
-    }
-    if ($null -ne $value) { break }
+    $accepted = [PlayzPickerTest]::FillAndAccept([IntPtr]$script:picker.Current.NativeWindowHandle, $mediaPath, [uint32]$script:appProcess.Id)
+    if ($accepted) { break }
     Start-Sleep -Milliseconds 200
   } while ([DateTime]::UtcNow -lt $deadline)
-  Save-Controls $script:picker 'native-picker-controls'
-  if ($null -eq $value) { throw 'Native file picker did not expose a writable filename control' }
-  $value.SetValue($mediaPath)
-  $open = $script:picker.FindFirst([System.Windows.Automation.TreeScope]::Descendants, (Named-Condition 'Open'))
-  Invoke-Element $open
+  if (-not $accepted) { throw 'Native file picker did not expose its expected filename edit and Open button' }
   $script:picker = $null
   Wait-Control 'Make a clip' | Out-Null
   Write-Output 'Installed UI: local media imported through the native picker'

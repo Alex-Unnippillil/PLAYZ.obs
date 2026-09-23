@@ -1,8 +1,8 @@
-name: Actual selected-window capture experiment
+name: Actual selected-window capture
 on:
   push:
-    branches: [work/local-recorder]
-    paths: ['tools/capture-fixture/**', 'scripts/test-capture.ps1', 'crates/playz-core/tests/capture_pipeline.rs', '.github/workflows/capture.yml']
+    branches: [main, work/local-recorder]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,4 +35,4 @@ jobs:
         with:
           name: selected-window-evidence-${{ github.sha }}
           path: artifacts/capture-fixture/
-          retention-days: 7
+          retention-days: 14

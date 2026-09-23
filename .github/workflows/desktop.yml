@@ -35,7 +35,7 @@ jobs:
         with:
           name: frontend-evidence
           path: artifacts/
-          retention-days: 7
+          retention-days: 14
   windows:
     runs-on: windows-2022
     timeout-minutes: 45
@@ -46,8 +46,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .node-version
-      - name: Cache pinned Rust dependencies and compiler outputs
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      - name: Restore pinned Rust dependencies and compiler outputs
+        id: rust-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             ~/.cargo/registry
@@ -81,6 +82,15 @@ jobs:
         run: |
           if (Test-Path target/release/bundle) { Remove-Item target/release/bundle -Recurse -Force }
           ./scripts/package.ps1 -SkipNative
+      - name: Save successfully built compiler outputs
+        if: steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
       - name: Test the actual installed application
         shell: pwsh
         run: ./scripts/test-installed.ps1
@@ -103,4 +113,4 @@ jobs:
             artifacts/NativeTests/
             artifacts/installed-smoke/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14

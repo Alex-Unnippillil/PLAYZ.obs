@@ -25,9 +25,9 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 12
     env:
-      PACKAGE_ARTIFACT: ${{ inputs.artifact_id || '10774352034' }}
-      PACKAGE_SHA256: ${{ inputs.sha256 || '2f4f444f38ab8c9b9af3b2e30547951b73ee775aa3a495bd35bd04cd8bf0b669' }}
-      PACKAGE_COMMIT: ${{ inputs.source_commit || '09f528e540f5b86df9db204517b86aa64be23529' }}
+      PACKAGE_ARTIFACT: ${{ inputs.artifact_id || '10775382652' }}
+      PACKAGE_SHA256: ${{ inputs.sha256 || '1093ffdaaaf785d18808372c4ab4c866afed49ab522f52d622502334dae5e140' }}
+      PACKAGE_COMMIT: ${{ inputs.source_commit || '553672a973f7d39131707045f75db4fcecaeb608' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
