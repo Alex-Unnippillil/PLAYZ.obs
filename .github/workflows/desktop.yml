@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: desktop-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   frontend:
     runs-on: ubuntu-24.04

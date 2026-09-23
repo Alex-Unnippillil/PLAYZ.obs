@@ -1,0 +1,38 @@
+name: Actual selected-window capture experiment
+on:
+  push:
+    branches: [work/local-recorder]
+    paths: ['tools/capture-fixture/**', 'scripts/test-capture.ps1', 'crates/playz-core/tests/capture_pipeline.rs', '.github/workflows/capture.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: capture-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  selected-window:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build the verified original libobs host
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1 -Native
+      - name: Actual Rust-to-libobs selected-window roundtrip
+        shell: pwsh
+        run: ./scripts/test-capture.ps1
+      - name: Preserve evidence even on failure
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/capture-fixture | Out-Null
+          git rev-parse HEAD | Out-File artifacts/capture-fixture/commit.txt
+          Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,VideoModeDescription | ConvertTo-Json | Out-File artifacts/capture-fixture/environment.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: selected-window-evidence-${{ github.sha }}
+          path: artifacts/capture-fixture/
+          retention-days: 7

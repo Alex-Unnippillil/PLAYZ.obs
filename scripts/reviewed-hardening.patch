@@ -1,0 +1,201 @@
+diff --git a/.github/workflows/assemble.yml b/.github/workflows/assemble.yml
+index 039e93e..6757c1c 100644
+--- a/.github/workflows/assemble.yml
++++ b/.github/workflows/assemble.yml
+@@ -42,7 +42,7 @@ jobs:
+           if ($LASTEXITCODE -ne 0) { throw 'Formatting failed' }
+           cargo test -p playz-core --locked --all-targets
+           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+-          cargo run -p playz-core --locked --bin generate-contracts
++          cargo run -p playz-core --locked --bin generate-contracts -- --check
+           if ($LASTEXITCODE -ne 0) { throw 'Contract generation failed' }
+           ./scripts/test-exports.ps1
+       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+ diff --git a/crates/playz-core/src/contracts.rs b/crates/playz-core/src/contracts.rs
+index 7859f49..6b05b09 100644
+--- a/crates/playz-core/src/contracts.rs
++++ b/crates/playz-core/src/contracts.rs
+@@ -241,7 +241,9 @@ pub struct ExportRequest {
+ }
+ impl ExportRequest {
+     pub fn validate(&self, duration_ms: f64) -> Result<(), String> {
+-        if !self.start_ms.is_finite()
++        if !duration_ms.is_finite()
++            || duration_ms <= 0.0
++            || !self.start_ms.is_finite()
+             || !self.end_ms.is_finite()
+             || self.start_ms < 0.0
+             || self.end_ms - self.start_ms < 250.0
+@@ -251,7 +253,17 @@ impl ExportRequest {
+                 "Choose a trim interval of at least 0.25 seconds within this recording".into(),
+             );
+         }
+-        if self.name.trim().is_empty()
++        let stem = self.name.split('.').next().unwrap_or("").to_ascii_uppercase();
++        let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
++            || ["COM", "LPT"].iter().any(|prefix| {
++                stem.strip_prefix(*prefix).is_some_and(|suffix| {
++                    matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³")
++                })
++            });
++        if reserved
++            || self.name.ends_with('.')
++            || self.name.ends_with(' ')
++            || self.name.trim().is_empty()
+             || self.name.len() > 100
+             || self
+                 .name
+@@ -316,6 +328,24 @@ mod tests {
+         assert!(r.validate(2000.0).is_err());
+     }
+     #[test]
++    fn export_rejects_windows_devices_and_invalid_duration() {
++        let mut request = ExportRequest {
++            recording_id: uuid::Uuid::new_v4().to_string(),
++            start_ms: 0.0,
++            end_ms: 1000.0,
++            mode: ExportMode::Accurate,
++            name: "safe clip".into(),
++        };
++        assert!(request.validate(f64::NAN).is_err());
++        assert!(request.validate(f64::INFINITY).is_err());
++        for name in ["CON", "nul.mp4", "LPT1", "com¹", "CONOUT$", "clip.", "clip "] {
++            request.name = name.into();
++            assert!(request.validate(2000.0).is_err(), "accepted {name}");
++        }
++        request.name = "勝利 — round 2".into();
++        assert!(request.validate(2000.0).is_ok());
++    }
++    #[test]
+     fn unknown_setting_fields_fail() {
+         let mut s = serde_json::to_value(Settings::new("C:\\Videos".into())).unwrap();
+         s["shell_command"] = "bad".into();
+diff --git a/crates/playz-core/src/core.rs b/crates/playz-core/src/core.rs
+index 53fc15d..8240932 100644
+--- a/crates/playz-core/src/core.rs
++++ b/crates/playz-core/src/core.rs
+@@ -551,7 +551,7 @@ impl Core {
+         if self.is_busy() {
+             return Err("Relink after recording has stopped".into());
+         }
+-        let source = paths::existing_media(&source)?;
++        let source = paths::registered_relink(&id, &source)?;
+         let probe = self.media.probe(&source).await?;
+         if !probe.compatible() {
+             return Err("Relink requires a compatible H.264/AAC master".into());
+diff --git a/crates/playz-core/src/media.rs b/crates/playz-core/src/media.rs
+index 6753a45..fd38a1f 100644
+--- a/crates/playz-core/src/media.rs
++++ b/crates/playz-core/src/media.rs
+@@ -235,16 +235,20 @@ impl Media {
+         request: &ExportRequest,
+         control: Control,
+     ) -> Result<Probe> {
++        if control.cancel.load(Ordering::Acquire) {
++            return Err(Error::Cancelled);
++        }
++        // A matching codec/duration does not establish ownership after a crash.
++        // Until receipt-backed reconciliation is implemented, fail closed rather
++        // than falsely adopting an unrelated user file as a successful job.
++        if output.exists() {
++            return Err("The export destination already exists. It was preserved and was not adopted as this job. Review it in the recording's exports folder or queue a new export.".into());
++        }
+         let source = self.probe(master).await?;
+         request.validate(source.duration_ms)?;
+         if !source.compatible() {
+             return Err("This first build exports H.264/AAC sources only".into());
+         }
+-        if output.exists() {
+-            let existing = self.probe(output).await?;
+-            validate_export(&existing, request)?;
+-            return Ok(existing);
+-        }
+         if temporary.exists() {
+             tokio::fs::remove_file(temporary).await?;
+         }
+diff --git a/crates/playz-core/src/paths.rs b/crates/playz-core/src/paths.rs
+index ad528a9..bd6bf06 100644
+--- a/crates/playz-core/src/paths.rs
++++ b/crates/playz-core/src/paths.rs
+@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
+ use serde::Serialize;
+ use std::{
+     fs,
+-    io::Write,
++    io::{Read, Write},
+     path::{Component, Path, PathBuf},
+ };
+ 
+@@ -64,6 +64,33 @@ pub fn existing_media(path: &Path) -> Result<PathBuf> {
+     }
+     Ok(fs::canonicalize(path)?)
+ }
++/// Relinking accepts a moved PLAYZ directory, not an arbitrary media folder
++/// where future recovery could overwrite an unrelated manifest/playback asset.
++pub fn registered_relink(id: &str, path: &Path) -> Result<PathBuf> {
++    validate_id(id)?;
++    let path = existing_media(path)?;
++    let folder = path.parent().ok_or("Recording has no parent directory")?;
++    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
++    if folder.file_name().and_then(|n| n.to_str()) != Some(id)
++        || !matches!(name, "master.mkv" | "master.mp4")
++    {
++        return Err("Relink the original master inside its complete PLAYZ UUID folder. Use Import for unrelated media.".into());
++    }
++    let manifest = folder.join("manifest.json");
++    local_path(&manifest)?;
++    let file = fs::File::open(&manifest)?;
++    if file.metadata()?.len() > 1024 * 1024 {
++        return Err("Recording manifest exceeds its size limit".into());
++    }
++    let value: serde_json::Value = serde_json::from_reader(file.take(1024 * 1024 + 1))?;
++    if value["schema_version"] != 1
++        || value["recording"]["id"].as_str() != Some(id)
++        || value["master_name"].as_str() != Some(name)
++    {
++        return Err("The selected master does not match this recording's manifest".into());
++    }
++    Ok(path)
++}
+ pub fn validate_id(id: &str) -> Result<()> {
+     uuid::Uuid::parse_str(id)
+         .map(|_| ())
+@@ -114,6 +141,25 @@ mod tests {
+         assert!(local_path(&d.path().join("../outside")).is_err());
+     }
+     #[test]
++    fn relink_requires_owned_folder_and_matching_manifest() {
++        let d = tempfile::tempdir().unwrap();
++        let id = uuid::Uuid::new_v4().to_string();
++        let folder = d.path().join(&id);
++        fs::create_dir(&folder).unwrap();
++        let master = folder.join("master.mkv");
++        fs::write(&master, b"fixture").unwrap();
++        assert!(registered_relink(&id, &master).is_err());
++        let manifest = folder.join("manifest.json");
++        atomic_json(&manifest, &serde_json::json!({
++            "schema_version": 1, "recording": {"id": id}, "master_name": "master.mkv"
++        })).unwrap();
++        assert!(registered_relink(&id, &master).is_ok());
++        assert!(registered_relink(&uuid::Uuid::new_v4().to_string(), &master).is_err());
++        atomic_json(&manifest, &serde_json::json!({"schema_version": 99})).unwrap();
++        assert!(registered_relink(&id, &master).is_err());
++        assert_eq!(fs::read(master).unwrap(), b"fixture");
++    }
++    #[test]
+     fn atomic_no_overwrite() {
+         let d = tempfile::tempdir().unwrap();
+         let a = d.path().join("temp.mp4");
+diff --git a/scripts/bootstrap.ps1 b/scripts/bootstrap.ps1
+index e29cc2e..42cb608 100644
+--- a/scripts/bootstrap.ps1
++++ b/scripts/bootstrap.ps1
+@@ -70,7 +70,7 @@ $allowed = @('obs-ffmpeg','obs-x264','obs-outputs','win-capture','win-wasapi','o
+ Get-ChildItem "$Obs/obs-plugins/64bit" -File | Where-Object { $_.BaseName -notin $allowed } | Remove-Item -Force
+ Get-ChildItem "$Obs/data/obs-plugins" -Directory | Where-Object { $_.Name -notin $allowed } | Remove-Item -Recurse -Force
+ Get-ChildItem "$Obs/bin/64bit" -Filter 'obs64.exe' | Remove-Item -Force
+-$inventory = Get-ChildItem $Runtime -File -Recurse | ForEach-Object {
++$inventory = Get-ChildItem $Runtime -File -Recurse | Where-Object { $_.FullName -ne (Join-Path $Runtime 'provenance.json') } | ForEach-Object {
+   @{ path = [IO.Path]::GetRelativePath($Runtime, $_.FullName).Replace('\','/'); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); size = $_.Length }
+ }
+ @{ schema_version = 1; components = $manifest; files = @($inventory) } | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8 "$Runtime/provenance.json"

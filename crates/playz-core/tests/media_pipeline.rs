@@ -13,10 +13,16 @@ fn decoded_frames(runtime: &Path, path: &Path) -> Vec<u8> {
     let output = Command::new(runtime.join("media/ffmpeg.exe"))
         .args(["-v", "error", "-i"])
         .arg(path)
-        .args(["-map", "0:v:0", "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"])
+        .args([
+            "-map", "0:v:0", "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
+        ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     output.stdout
 }
 fn frame_id(frame: &[u8]) -> u32 {
@@ -55,7 +61,10 @@ async fn real_media_pipeline_preserves_master_and_validates_trim_frames() {
     };
     let clip = directory.path().join("accurate.mp4");
     let temporary = directory.path().join("accurate.tmp.mp4");
-    let result = media.export(&master, &clip, &temporary, &request, Control::default()).await.unwrap();
+    let result = media
+        .export(&master, &clip, &temporary, &request, Control::default())
+        .await
+        .unwrap();
     assert!((result.duration_ms - 2000.0).abs() < 150.0);
     let decoded = decoded_frames(&runtime, &clip);
     let frame_bytes = 160 * 96 * 3;
@@ -73,13 +82,28 @@ async fn real_media_pipeline_preserves_master_and_validates_trim_frames() {
         .output()
         .unwrap();
     assert!(audio.status.success());
-    assert!(audio.stdout.chunks_exact(2).any(|s| i16::from_le_bytes([s[0], s[1]]).unsigned_abs() > 1000));
+    assert!(
+        audio
+            .stdout
+            .chunks_exact(2)
+            .any(|s| i16::from_le_bytes([s[0], s[1]]).unsigned_abs() > 1000)
+    );
     let cancelled = Control::default();
     cancelled.cancel.store(true, Ordering::Release);
     let cancelled_path = directory.path().join("cancelled.mp4");
-    let result = media.export(&master, &cancelled_path, &directory.path().join("cancelled.tmp.mp4"), &request, cancelled).await;
+    let result = media
+        .export(
+            &master,
+            &cancelled_path,
+            &directory.path().join("cancelled.tmp.mp4"),
+            &request,
+            cancelled,
+        )
+        .await;
     assert!(result.is_err());
     assert!(!cancelled_path.exists());
     assert_eq!(digest(&master), original);
-    println!("Real media passed: {count} frames; source frame IDs {first}..{last}; non-silent audio; master hash unchanged; cancellation preserved source.");
+    println!(
+        "Real media passed: {count} frames; source frame IDs {first}..{last}; non-silent audio; master hash unchanged; cancellation preserved source."
+    );
 }
