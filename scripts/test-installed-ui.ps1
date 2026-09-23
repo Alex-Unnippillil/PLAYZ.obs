@@ -90,14 +90,33 @@ function Import-Fixture {
   Wait-Control 'Make a clip' | Out-Null
   Write-Output 'Installed UI: local media imported through the native picker'
 }
+function Playback-Seconds {
+  $items = $script:window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+  # WebView2 exposes the React timer as adjacent current / duration text nodes.
+  # Read that observed structure rather than matching a fabricated merged label.
+  for ($i = 1; $i -lt $items.Count - 1; $i++) {
+    if ($items[$i].Current.Name.Trim() -eq '/' -and $items[$i-1].Current.Name -match '^00:(\d{2})$' -and $items[$i+1].Current.Name -match '^00:0[1-9]$') {
+      return [int]$items[$i-1].Current.Name.Split(':')[1]
+    }
+  }
+  return -1
+}
 function Verify-Playback {
+  $initial = Playback-Seconds
+  if ($initial -ne 0) { throw "Newly imported video did not begin at zero: $initial" }
   Invoke-Control 'Preview interval'
   $deadline = [DateTime]::UtcNow.AddSeconds(15)
   do {
-    $items = $script:window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-    foreach ($item in $items) {
-      $name = $item.Current.Name
-      if ($name -match '^00:0[1-9]\s*/\s*00:0[1-9]$') { Save-Window 'playing-import'; Write-Output "Installed UI: real video playhead advanced to $name"; return }
+    $position = Playback-Seconds
+    if ($position -ge 1 -and $position -le 4) {
+      $player = Wait-Control 'Playback of fixture'
+      $scroll = $null
+      if ($player.TryGetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern, [ref]$scroll)) {
+        ([System.Windows.Automation.ScrollItemPattern]$scroll).ScrollIntoView()
+      }
+      Save-Window 'playing-import'
+      Write-Output "Installed UI: real HTML video playhead advanced from $initial to $position seconds"
+      return
     }
     Start-Sleep -Milliseconds 150
   } while ([DateTime]::UtcNow -lt $deadline)
