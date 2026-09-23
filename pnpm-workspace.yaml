@@ -1,0 +1,6 @@
+packages:
+  - apps/desktop
+onlyBuiltDependencies:
+  - esbuild
+  - '@tailwindcss/oxide'
+  - '@swc/core'

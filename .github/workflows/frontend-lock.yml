@@ -1,0 +1,27 @@
+name: Resolve frontend lock for review
+on:
+  push:
+    branches: [work/local-recorder]
+    paths: ['package.json', 'apps/desktop/package.json', 'pnpm-workspace.yaml', '.github/workflows/frontend-lock.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - run: npm install --global pnpm@12.6.0
+      - name: Resolve only; do not modify source or execute package lifecycle scripts
+        run: pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: reviewed-frontend-lock
+          path: pnpm-lock.yaml
+          retention-days: 7
