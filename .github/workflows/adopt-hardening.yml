@@ -1,4 +1,5 @@
 # One-time maintainer edit adoption. Tests run later against its immutable commit.
+# Workflow edits themselves are applied only through the authorized connector.
 name: Adopt reviewed hardening changes
 on:
   push:
@@ -15,7 +16,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: work/local-recorder
-      - name: Verify and apply the explicitly reviewed patch
+      - name: Verify and apply only reviewed non-workflow sources
         env:
           EXPECTED_HEAD: ${{ github.sha }}
         run: |
@@ -27,11 +28,11 @@ jobs:
           assert hashlib.sha256(data).hexdigest() == 'debc7f69bf0d8fea99e13e51eb730f6e9abc9615a93d242692debeb20204a540'
           p.write_bytes(data)
           PY
-          git apply --check scripts/reviewed-hardening.patch
-          git apply --index scripts/reviewed-hardening.patch
+          git apply --check --exclude='.github/workflows/*' scripts/reviewed-hardening.patch
+          git apply --index --exclude='.github/workflows/*' scripts/reviewed-hardening.patch
           cargo fmt --all
-          git add -- .github/workflows/assemble.yml crates/playz-core/src/contracts.rs crates/playz-core/src/core.rs crates/playz-core/src/media.rs crates/playz-core/src/paths.rs scripts/bootstrap.ps1 crates/playz-core/tests/capture_pipeline.rs crates/playz-core/tests/export_safety.rs crates/playz-core/tests/media_pipeline.rs
-          git rm -f -- scripts/reviewed-hardening.patch .github/workflows/adopt-hardening.yml
+          git add -- crates/playz-core/src/contracts.rs crates/playz-core/src/core.rs crates/playz-core/src/media.rs crates/playz-core/src/paths.rs scripts/bootstrap.ps1 crates/playz-core/tests/capture_pipeline.rs crates/playz-core/tests/export_safety.rs crates/playz-core/tests/media_pipeline.rs
+          git rm -f -- scripts/reviewed-hardening.patch
           git diff --cached --check
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix(core): reject ambiguous exports and unsafe relinks; validate Windows filenames'
           git push origin HEAD:work/local-recorder

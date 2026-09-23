@@ -20,13 +20,15 @@ if ($Audio) {
 }
 $process = [Diagnostics.Process]::new()
 $process.StartInfo = $info
+$started = $false
 try {
-  if (-not $process.Start()) { throw 'Could not launch the deterministic capture window' }
+  $started = $process.Start()
+  if (-not $started) { throw 'Could not launch the deterministic capture window' }
   $ready = $process.StandardOutput.ReadLineAsync()
   if (-not $ready.Wait(20000) -or $ready.Result -ne 'PLAYZ_FIXTURE_READY') { throw 'The fixture window did not become ready; check the interactive desktop and .NET Windows Forms availability' }
   cargo test -p playz-core --locked --test capture_pipeline -- --ignored --nocapture
   if ($LASTEXITCODE -ne 0) { throw 'Real capture acceptance failed; do not mark this environment supported' }
 } finally {
-  if (-not $process.HasExited) { $process.Kill($true); $process.WaitForExit(5000) | Out-Null }
+  if ($started -and -not $process.HasExited) { $process.Kill($true); $process.WaitForExit(5000) | Out-Null }
   $process.Dispose()
 }
