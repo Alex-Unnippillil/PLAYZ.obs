@@ -1,0 +1,39 @@
+# One-time adoption of an already resolved and SHA-256 reviewed lock artifact.
+# This is NOT a test job and cannot run on pull requests or main.
+name: Adopt reviewed frontend lock
+on:
+  push:
+    branches: [work/local-recorder]
+    paths: [.github/workflows/adopt-reviewed-lock.yml]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  adopt:
+    if: github.repository == 'Alex-Unnippillil/PLAYZ.obs' && github.actor == 'Alex-Unnippillil'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: work/local-recorder
+      - name: Download exactly the reviewed artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api repos/Alex-Unnippillil/PLAYZ.obs/actions/artifacts/10773018344/zip > /tmp/reviewed-lock.zip
+      - name: Verify bytes and adopt only the lockfile
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib, zipfile
+          archive=pathlib.Path('/tmp/reviewed-lock.zip').read_bytes()
+          assert hashlib.sha256(archive).hexdigest() == '1973aadc7819eacd3ccdf840db0ea752b1884cccd516d4f64790023fdd270902'
+          with zipfile.ZipFile('/tmp/reviewed-lock.zip') as z:
+              assert z.namelist() == ['pnpm-lock.yaml']
+              data=z.read('pnpm-lock.yaml')
+          assert hashlib.sha256(data).hexdigest() == 'e24e706d88370f85b05756867c764c5aaff8cf6cd87743adbb078941298d0c59'
+          pathlib.Path('pnpm-lock.yaml').write_bytes(data)
+          PY
+          git add -- pnpm-lock.yaml
+          test "$(git diff --cached --name-only)" = 'pnpm-lock.yaml'
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'build: pin reviewed frontend dependency graph'
+          git push origin HEAD:work/local-recorder
