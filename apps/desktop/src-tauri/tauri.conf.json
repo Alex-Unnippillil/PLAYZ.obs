@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PLAYZ",
+  "version": "0.1.0",
+  "identifier": "io.playz.recorder",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{"label":"main","title":"PLAYZ","width":1280,"height":820,"minWidth":760,"minHeight":500,"center":true,"devtools":false,"backgroundColor":"#111318"}],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; media-src 'self' asset: http://asset.localhost blob:; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'",
+      "assetProtocol": {"enable":true,"scope":[]},
+      "capabilities": ["main"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "category": "Video",
+    "shortDescription": "Local-first game recording and review",
+    "longDescription": "PLAYZ records selected games and windows, preserves MKV masters, and manages playback and clip exports entirely on your PC. Unsigned local test build; see release checklist.",
+    "resources": {"resources/runtime/":"runtime/"},
+    "icon": ["icons/icon.ico","icons/icon.png"],
+    "windows": {
+      "webviewInstallMode": {"type":"offlineInstaller","silent":true},
+      "nsis": {"installMode":"currentUser","displayLanguageSelector":false,"installerHooks":"installer/hooks.nsh"}
+    }
+  }
+}
