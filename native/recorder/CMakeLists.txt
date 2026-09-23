@@ -25,6 +25,9 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/obsconfig.h"
 add_executable(playz-recorder main.cpp)
 target_include_directories(playz-recorder PRIVATE "${OBS_SOURCE_DIR}/libobs" "${CMAKE_CURRENT_BINARY_DIR}" "${JSON_INCLUDE_DIR}")
 target_compile_definitions(playz-recorder PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
+# WIN32_LEAN_AND_MEAN excludes COM declarations from windows.h. Include the
+# platform COM header explicitly as a precompiled header for this Windows host.
+target_precompile_headers(playz-recorder PRIVATE <objbase.h>)
 target_compile_options(playz-recorder PRIVATE /W4 /EHsc /utf-8 /permissive-)
 target_link_libraries(playz-recorder PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/obs.lib" ole32 user32)
 set_target_properties(playz-recorder PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${OBS_RUNTIME_DIR}/bin/64bit")

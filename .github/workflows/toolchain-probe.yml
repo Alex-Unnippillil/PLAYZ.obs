@@ -9,23 +9,26 @@ permissions:
 jobs:
   inspect:
     runs-on: windows-2022
+    timeout-minutes: 10
     steps:
-      - name: Inspect official registries and native assets
+      - name: Inspect official registries
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           node --version
           rustc --version
-          cmake --version
-          $packages = @('react','react-dom','typescript','vite','@vitejs/plugin-react','vitest','@testing-library/react','@testing-library/jest-dom','jsdom','@tauri-apps/api','@tauri-apps/cli','@tanstack/react-query','@tanstack/react-virtual','lucide-react','zod','react-hook-form','@hookform/resolvers','tailwindcss','@tailwindcss/vite','@radix-ui/react-dialog','@radix-ui/react-slot','class-variance-authority','clsx','tailwind-merge','pnpm','@playwright/test','@axe-core/playwright')
-          foreach ($p in $packages) { $v = npm view $p version; Write-Output "NPM $p $v" }
-          foreach ($p in @('tauri','tauri-build','tauri-plugin-dialog','tauri-plugin-global-shortcut','tauri-plugin-single-instance','tauri-plugin-window-state','tauri-plugin-opener','tauri-plugin-notification','tokio','serde','serde_json','thiserror','tracing','tracing-appender','tracing-subscriber','rusqlite','rusqlite_migration','ts-rs','reqwest','uuid','chrono','directories','fs2','tempfile','proptest','windows','sha2','notify')) {
-            try { $r = Invoke-RestMethod "https://crates.io/api/v1/crates/$p" -UserAgent 'PLAYZ-build-inspection'; Write-Output "CRATE $p $($r.crate.max_stable_version)" } catch { Write-Warning "Registry unavailable: $p" }
+          $packages = @('react','react-dom','typescript','vite','@vitejs/plugin-react','vitest','@testing-library/react','@testing-library/jest-dom','@testing-library/user-event','jsdom','@types/react','@types/react-dom','@types/node','@tauri-apps/api','@tauri-apps/cli','@tanstack/react-query','@tanstack/react-virtual','lucide-react','zod','react-hook-form','@hookform/resolvers','tailwindcss','@tailwindcss/vite','@radix-ui/react-dialog','@radix-ui/react-slot','class-variance-authority','clsx','tailwind-merge','pnpm','@playwright/test','@axe-core/playwright')
+          $versions = [ordered]@{}
+          foreach ($p in $packages) {
+            $v = npm view $p version
+            if ($LASTEXITCODE -ne 0) { throw "Registry inspection failed for $p" }
+            $versions[$p] = "$v".Trim()
           }
-          $obs = Invoke-RestMethod 'https://api.github.com/repos/obsproject/obs-studio/releases/tags/32.2.2'
-          $obs.assets | Where-Object { $_.name -match 'Windows-x64|Sources' } | Select-Object name, digest, browser_download_url | ConvertTo-Json
-          $ff = Invoke-RestMethod 'https://api.github.com/repos/GyanD/codexffmpeg/releases/latest'
-          Write-Output "FFMPEG_TAG $($ff.tag_name)"
-          $ff.assets | Select-Object name, digest, browser_download_url | ConvertTo-Json
-          $tag = Invoke-RestMethod 'https://api.github.com/repos/nlohmann/json/git/ref/tags/v3.12.0'
-          Write-Output "JSON_TAG $($tag.object.sha) $($tag.object.type)"
+          $versions | ConvertTo-Json | Tee-Object -FilePath versions.json
+          npm view pnpm@12.6.0 engines --json
+          Invoke-RestMethod 'https://nodejs.org/dist/index.json' | Select-Object -First 5 version,lts | ConvertTo-Json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: inspected-frontend-versions
+          path: versions.json
+          retention-days: 7
