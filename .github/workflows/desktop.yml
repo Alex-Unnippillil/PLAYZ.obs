@@ -1,0 +1,90 @@
+name: Desktop verification and unsigned package
+on:
+  push:
+    branches: [main, work/local-recorder]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - run: npm install --global pnpm@12.6.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Dependency vulnerability report
+        if: always()
+        run: |
+          mkdir -p artifacts
+          pnpm audit --json > artifacts/npm-audit.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: frontend-evidence
+          path: artifacts/
+          retention-days: 7
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - name: Pinned frontend dependencies
+        shell: pwsh
+        run: |
+          npm install --global pnpm@12.6.0
+          if ($LASTEXITCODE -ne 0) { throw 'pnpm installation failed' }
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen dependency installation failed' }
+      - name: Native runtime and protocol verification
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1 -Native
+      - name: Rust contracts and persistence
+        shell: pwsh
+        run: |
+          cargo test -p playz-core --locked --all-targets
+          if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
+          cargo run -p playz-core --locked --bin generate-contracts -- --check
+          if ($LASTEXITCODE -ne 0) { throw 'Generated contracts have drifted' }
+      - name: Real FFmpeg media and export tests
+        shell: pwsh
+        run: ./scripts/test-media.ps1
+      - name: Build desktop and offline NSIS installer
+        shell: pwsh
+        run: ./scripts/package.ps1 -SkipNative
+      - name: Capture build evidence
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          git rev-parse HEAD | Out-File artifacts/commit.txt
+          if (Test-Path build/native/Testing) { Copy-Item build/native/Testing artifacts/NativeTests -Recurse -Force }
+          if (Test-Path apps/desktop/src-tauri/resources/runtime/provenance.json) { Copy-Item apps/desktop/src-tauri/resources/runtime/provenance.json artifacts/native-provenance.json }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: windows-test-build-${{ github.sha }}
+          path: |
+            artifacts/*.exe
+            artifacts/*.json
+            artifacts/commit.txt
+            artifacts/NativeTests/
+          if-no-files-found: error
+          retention-days: 7
