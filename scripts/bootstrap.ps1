@@ -47,7 +47,7 @@ $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.e
 $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (!$vs) { throw 'Visual Studio C++ x64 build tools are required' }
 $devcmd = Join-Path $vs 'Common7/Tools/VsDevCmd.bat'
-cmd /s /c "`"`"$devcmd`" -arch=x64 -host_arch=x64 >nul && set`"" | ForEach-Object {
+cmd /c "call `"$devcmd`" -arch=x64 -host_arch=x64 >nul && set" | ForEach-Object {
   if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process') }
 }
 if (!(Get-Command cl.exe -ErrorAction SilentlyContinue)) { throw 'Could not enter the MSVC build environment' }

@@ -9,4 +9,4 @@ pub mod paths;
 pub mod process;
 pub mod recorder;
 pub use core::Core;
-pub use error::{Error,Result};
+pub use error::{Error, Result};

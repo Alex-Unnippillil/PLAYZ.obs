@@ -51,4 +51,3 @@ CREATE INDEX export_queue ON export_jobs(state, created_at);
 CREATE TABLE settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);
 CREATE TABLE schema_history (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
 INSERT INTO schema_history VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ','now'));
-CREATE VIRTUAL TABLE recording_search USING fts5(title, notes, tags, content='');
