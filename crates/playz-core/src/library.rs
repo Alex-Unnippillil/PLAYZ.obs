@@ -68,7 +68,7 @@ fn backup_connection(c: &Connection, destination: &Path) -> Result<()> {
     if destination.exists() {
         return Err("Backup destination already exists".into());
     }
-    c.backup(rusqlite::DatabaseName::Main, destination, None)?;
+    c.backup("main", destination, None)?;
     Ok(())
 }
 fn phase(text: String) -> rusqlite::Result<Phase> {

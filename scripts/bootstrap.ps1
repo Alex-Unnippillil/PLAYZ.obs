@@ -51,7 +51,7 @@ cmd /c "call `"$devcmd`" -arch=x64 -host_arch=x64 >nul && set" | ForEach-Object 
   if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process') }
 }
 if (!(Get-Command cl.exe -ErrorAction SilentlyContinue)) { throw 'Could not enter the MSVC build environment' }
-$redist = Get-ChildItem (Join-Path $vs 'VC/Redist/MSVC') -Directory | Sort-Object Name -Descending | Select-Object -First 1
+$redist = Get-ChildItem (Join-Path $vs 'VC/Redist/MSVC') -Directory | Where-Object { $_.Name -match '^\d+\.' -and (Test-Path (Join-Path $_.FullName 'x64')) } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
 $crt = Get-ChildItem (Join-Path $redist.FullName 'x64') -Directory | Where-Object Name -Match 'Microsoft.VC.*.CRT' | Select-Object -First 1
 if (!$crt) { throw 'MSVC redistributable CRT not found' }
 Copy-Item (Join-Path $crt.FullName '*.dll') "$Obs/bin/64bit/" -Force
