@@ -1,47 +1,44 @@
-# PLAYZ implementation status — 0.1 local engineering preview
+# PLAYZ 0.1 — local engineering preview
 
-This is a source/build status, not a production or hardware certification. Phase 1 acceptance is **open** until a clean supported Windows 11 installation completes record → restart → find → play → export with the application's WAN access denied. Phase 2 League automation is **not implemented or enabled**.
+The manual local workflow is implemented. The first full unsigned NSIS installer built successfully. A real selected-window capture, finalize, catalog restart and accurate clip-export test has passed. **Production acceptance is not complete.** Clean Windows 11 offline installation, packaged playback, captured audio, real-game/GPU and sustained-session tests remain separate gates. League automation is not enabled.
 
-## Verified evidence to date
+## Recorded evidence
 
-| Evidence | Exact revision / run | Result and limits |
+| Evidence | Exact source / Actions run | Result |
 |---|---|---|
-| Native C++ host + protocol CTest | `ee134a144ff348467a05efccaa7745931a4d695a`, Actions `35911118637` | Passed on hosted Windows Server 2022. Verified 1,784 C exports from pinned OBS DLL. Does not prove capture/hardware. |
-| Frozen frontend dependency installation, strict TypeScript, unit tests, production build, dependency audit | `09f528e540f5b86df9db204517b86aa64be23529`, Actions `35912714444`, job `107356328242` | Passed: 30 tests / 4 files. Audit exit zero. Renderer unit tests are not native desktop tests. |
-| Rust/core contracts and real FFmpeg media pipeline | Same revision/run, Windows job `107356327994` | Those steps passed. The media test decodes labeled output frames, checks duration/non-silent PCM, cancellation and preservation of the original hash. |
-| Core formatting at that revision | `35912714365` | Failed only on formatting of newly added media test; corrected in subsequent source. Re-run on final commit is required. |
-| Full desktop/NSIS package | `35912714444` | Still being verified when this status was written. A package is not claimed until its artifact and final hash exist. |
+| Original C++ libobs host and protocol CTest | `ee134a144ff348467a05efccaa7745931a4d695a` / `35911118637` | Passed Windows build and protocol test; verified 1,784 C exports from pinned OBS DLL. |
+| Frontend and audit | `09f528e540f5b86df9db204517b86aa64be23529` / `35912714444` | Frozen install, strict TypeScript, 30 tests in four files, Vite production build and audit passed. |
+| Core/contracts and actual FFmpeg media | Same source/run | Passed labeled decoded-frame trim bounds, generated audio signal, duration, cancellation and original-hash preservation. |
+| Full unsigned NSIS package | Same source/run, artifact `10774352034` | Successfully produced; ZIP size 320,829,479 bytes. ZIP hash differs from embedded installer hash. See its `package-evidence.json`. |
+| Real selected-window workflow | `f4f42448f2e597f4a8c45178337d38cb1e2222b6` / `35914615521` | Actual Rust/libobs capture, stop, playback asset/export and reopened catalog/bookmark passed. 7,733 ms; software x264, 720p30, Hyper-V Video; audio disabled. |
+| Actual SQLite runtime | Same selected-window run | **3.53.2**, queried from the bundled runtime. |
+| Recovery hardening | `d826b33223bbf1d1c4c2a07baeed7b54c4d20af5` | Strict relink ownership, existing-output refusal, pre-cancel and Windows filename validation committed with tests. |
 
-Every later fix invalidates affected earlier acceptance evidence. Final package evidence is stored in the CI artifact `package-evidence.json`, keyed to its exact source commit. Do not substitute a build of a different commit.
+`docs/VERIFICATION_LOG.md` records artifact hashes and environment. Earlier evidence does not certify later changes; rerun affected gates on the exact final commit. `package-evidence.json` binds each installer to its source/hash/signature status. The original media-test formatting failure was corrected, not suppressed.
 
 ## Requirements-to-implementation matrix
 
-| Requirement | Implementation | Status / test / unresolved acceptance |
+| Requirement | Implementation | Status / remaining gate |
 |---|---|---|
-| Original local desktop shell | `apps/desktop/src`, `src-tauri` | Implemented; frontend tests/build pass. Packaged WebView2 interaction and scaling acceptance open. |
-| Real capture adapter | `native/recorder`, `scripts/bootstrap.ps1` | Compiles against pinned upstream OBS 32.2.2 headers/runtime; original host, not Ascent proprietary wrapper. Real selected-window/game hardware proof open. |
-| Explicit capture scope and microphone opt-in | Native discovery/start validation; Settings form/core validation | Implemented. No whole-desktop fallback. Microphone off by default. Audio device loss and real-game cases require hardware testing. |
-| Supervision / idempotency / bounded IPC | `engine.rs`, `core.rs`, `state.rs`, `process.rs` | Unit-tested boundaries; process ownership/inherited private pipes. No promise of uninterrupted recording after controller failure. Full fault-injection matrix open. |
-| Patched SQLite and durable library | `library.rs`, migrations, `paths.rs` | Bounded single-writer service, WAL/FULL, runtime version check, consistent backup. Portable tests; actual runtime version must accompany final evidence. |
-| Lifecycle manifests / startup recovery | `core.rs`, `library.rs`, `paths.rs` | Implemented for known interrupted entries/manifests. Comprehensive external move/watch/reparse-race tests open. |
-| Playback | `media.rs`, Tauri scoped asset command, Review view | Compatible MKV → MP4 remux tested with real FFmpeg. Packaged large-file ranged seeking/WebView2 and Windows N codec matrix open. |
-| Accurate and fast export | `media.rs`, Export Queue / Review | Accurate media fixture test passes at cited revision. Fast mode is explicitly keyframe-aligned, not frame-exact. Broader fast-mode boundary tests open. |
-| Export safety | `export_safety.rs`, native request/path validation | Reject pre-cancelled jobs and existing ambiguous outputs before spawning. No silent overwrite/adoption. Receipt-backed automatic final-output recovery is not implemented. |
-| Library editing / bookmarks | Native commands, SQLite, Library / Review views | Implemented title/tags/notes/favorite/resume/bookmark editing. Local/UI tests; end-to-end desktop evidence open. |
-| Relink / removal | `paths::registered_relink`, core commands | Relink requires complete original UUID directory and matching manifest. Import unrelated media. Removal hides catalog entry; no destructive media deletion. |
-| Global shortcuts / tray / single instance / quit | `src-tauri/src/lib.rs` | Implemented through maintained Tauri integrations. Interactive lifecycle/conflict tests open. |
-| Native capture integration fixture | `tools/capture-fixture`, `scripts/test-capture.ps1`, `tests/capture_pipeline.rs` | Real Rust → libobs → media → restart/export harness; developer-only. Ignored in ordinary cargo tests; explicitly run on interactive Windows. Not a real-game or GPU-family qualification. |
-| League integration / event ingestion | `league.rs` pure preparatory logic | Clock/candidate unit fixtures only. No live client, certificate trust bundle, automatic recording, deduplication/backfill or full session workflow. Disabled in UI. |
-| Media PTS synchronization | Preparatory pure mapping functions | Not calibrated against actual recorder PTS. Live manual bookmarks currently use encoded-frame-count timing, not a claimed 500-ms precision guarantee. |
-| Offline installer | `tauri.conf.json`, `scripts/package.ps1` | Per-user NSIS with full WebView2 offline installer mode. Build/artifact/clean-install verification are separate gates. |
-| Signing / complete SBOM / corresponding source | `third_party`, release checklist | Signing identity absent. Runtime hashes/notices collected, but full native/Rust/npm SBOM and corresponding-source audit remain open. No public release. |
+| Desktop shell and local data | `apps/desktop/src`, `src-tauri/src/main.rs` | Library, Review, Exports, Settings, Diagnostics; actual local commands, no mock capture. Frontend checks passed; installed UI/scaling acceptance separate. |
+| Capture backend | `native/recorder`, `scripts/bootstrap.ps1` | Original host around pinned upstream OBS 32.2.2. Real window capture proven in hosted environment. Real games/GPU encoders unqualified. |
+| Explicit scope / privacy | Native discovery/start; Settings/core validation | Specific window/game only, no monitor fallback; microphone off by default. Captured-audio/device-loss evidence open. |
+| Supervision / IPC / idempotency | `recorder.rs`, `core.rs`, `process.rs` | Serialized decisions, bounded private inherited handles, child ownership. Renderer-independent capture. Controller crash can interrupt an MKV; complete fault matrix open. |
+| Durable catalog | `library.rs`, migrations | Bounded writer, foreign keys, parameterized SQL, WAL/FULL, consistent backup, patched runtime check. Restart tested; full restore/upgrade cases open. |
+| Manifests / reconciliation | `core.rs`, `library.rs`, `paths.rs` | Versioned manifests and interrupted-entry recovery. External move/watch/reparse-race matrix not complete. |
+| Offline playback | `media.rs`, scoped native asset command, Review | Real compatible MKV→MP4 remux. HTML video seek/speed/volume/fullscreen/resume implemented. Packaged large-file/edition/codec matrix open. |
+| Accurate / fast export | `media.rs`, Review/Export Queue | Accurate real-media test passed. Fast mode explicitly keyframe-aligned, not exact. Persistent queue/cancel/retry and pause/restart during capture implemented. |
+| Export ownership safety | `media.rs`, `contracts.rs`, `tests/export_safety.rs` | Existing ambiguous destination fails closed without overwrite/adoption. Pre-cancel check before spawning. Receipt-backed automatic adoption not implemented. |
+| Editing / bookmarks | Native library commands and views | Title/tags/notes/favorites/resume/bookmark CRUD/import. Capture test recovered saved bookmark after catalog reopen. |
+| Relink / removal | `paths::registered_relink`, core commands | Complete original UUID folder + matching manifest required. Unrelated files use Import. Removal hides entry and preserves originals/exports. |
+| Hotkeys / tray / single instance / quit | `src-tauri/src/main.rs` | Maintained Tauri integrations. Installed smoke harness added; active-recording lifecycle acceptance open. |
+| Capture integration harness | `tools/capture-fixture`, `tests/capture_pipeline.rs` | Real Rust/libobs/media/catalog test, not shipped. First pass documented. Not game/audio/hardware-family certification. |
+| League and media clock mapping | `league.rs` | Preparatory pure mapping/candidate tests only. No live integration, certificate bundle, auto-recording or backfill. Live bookmarks use frame-count timing, not calibrated exact PTS. |
+| Offline installer | Tauri config; build/package scripts | Per-user NSIS with full WebView2 offline installer mode; first package build passed. Clean offline installation not yet accepted. |
+| Signing / SBOM / source compliance | `third_party`, release checklist | Native hashes/notices gathered. Signing identity absent; full Rust/npm/native SBOM and corresponding-source audit still required. No public release. |
 
-## Intentional first-build limits
+## First-build limits
 
-SDR H.264/AAC only; 1080p/720p at 30/60 fps. System-output audio may include unrelated applications. One mixed audio track; no live meters, per-game isolation, independent microphone tracks, HDR, automatically chosen encoder fallback or claimed hardware validation. No automatic deletion, cloud, account, telemetry, updater, YouTube/Discord publishing or LLM features.
+SDR H.264/AAC, 1080p/720p at 30/60 fps. One mixed audio track; system output may include other applications. No live meters, per-game isolation, separate mic tracks, HDR, automatic encoder fallback, automatic deletion, cloud/account/telemetry/updater/publishing or League automation.
 
-A detected encoder is not a tested encoder. CPU/GPU/RAM impact, two-hour recording stability, A/V drift and the NVIDIA/AMD/Intel matrix have not been measured. Preserve originals and make a short test recording before any important session.
-
-## Next acceptance work
-
-Run the final installer and the real capture fixture on an interactive supported Windows 11 system, then test a real game and the complete offline/restart/export flow. Complete fault injection and long-session/hardware measurements. Only after the local workflow is accepted should League automation be connected to real local endpoints and synchronized output PTS. See `docs/ACCEPTANCE.md` for the detailed evidence checklist.
+A detected encoder is not hardware-qualified. CPU/GPU/RAM impact, two-hour stability, A/V drift and NVIDIA/AMD/Intel coverage are unmeasured. Preserve originals and make a short test recording before an important session. Follow `docs/ACCEPTANCE.md`, `docs/RECOVERY_EDGE_CASES.md` and `RELEASE_CHECKLIST.md` before changing the release classification.

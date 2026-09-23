@@ -1,0 +1,76 @@
+name: Smoke test an existing unsigned package
+on:
+  push:
+    branches: [work/local-recorder]
+    paths: [.github/workflows/package-smoke.yml]
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: Existing package artifact from this repository
+        required: true
+        type: string
+      sha256:
+        description: SHA-256 of the complete artifact ZIP
+        required: true
+        type: string
+      source_commit:
+        description: Expected package source commit
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  installed-ui:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    env:
+      PACKAGE_ARTIFACT: ${{ inputs.artifact_id || '10774352034' }}
+      PACKAGE_SHA256: ${{ inputs.sha256 || '2f4f444f38ab8c9b9af3b2e30547951b73ee775aa3a495bd35bd04cd8bf0b669' }}
+      PACKAGE_COMMIT: ${{ inputs.source_commit || '09f528e540f5b86df9db204517b86aa64be23529' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Download only the explicitly identified repository artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$PACKAGE_ARTIFACT" =~ ^[0-9]+$ ]]
+          gh api "repos/Alex-Unnippillil/PLAYZ.obs/actions/artifacts/$PACKAGE_ARTIFACT/zip" > package.zip
+      - name: Verify archive, source identity and installer bytes
+        shell: python
+        run: |
+          import hashlib,json,os,pathlib,shutil,zipfile
+          archive=pathlib.Path('package.zip')
+          def digest(path):
+              with path.open('rb') as stream:
+                  return hashlib.file_digest(stream,'sha256').hexdigest()
+          assert digest(archive) == os.environ['PACKAGE_SHA256']
+          with zipfile.ZipFile(archive) as z:
+              manifests=[n for n in z.namelist() if n.endswith('package-evidence.json')]
+              assert len(manifests)==1
+              manifest=json.loads(z.read(manifests[0]).decode('utf-8-sig'))
+              assert manifest['commit']==os.environ['PACKAGE_COMMIT']
+              installers=[n for n in z.namelist() if n.endswith('.exe')]
+              assert len(installers)==1
+              folder=pathlib.Path('target/release/bundle/nsis')
+              folder.mkdir(parents=True,exist_ok=True)
+              destination=folder/pathlib.PurePosixPath(installers[0]).name
+              with z.open(installers[0]) as source, destination.open('wb') as output:
+                  shutil.copyfileobj(source,output)
+              assert digest(destination)==manifest['sha256']
+              pathlib.Path('artifacts').mkdir(exist_ok=True)
+              pathlib.Path('artifacts/tested-package.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
+      - name: Install and exercise the real Tauri application
+        shell: pwsh
+        run: ./scripts/test-installed.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: installed-package-smoke-${{ github.sha }}
+          path: |
+            artifacts/tested-package.json
+            artifacts/installed-smoke/
+          retention-days: 7
