@@ -2,9 +2,9 @@ name: Native recorder
 on:
   push:
     branches: [main, work/local-recorder]
-    paths: ['native/**', 'scripts/bootstrap.ps1', 'scripts/obs-import-lib.ps1', 'third_party/native-lock.json', '.github/workflows/native.yml']
+    paths: ['native/**', 'scripts/bootstrap.ps1', 'scripts/*exports.ps1', 'scripts/obs-import-lib.ps1', 'third_party/native-lock.json', '.github/workflows/native.yml']
   pull_request:
-    paths: ['native/**', 'scripts/bootstrap.ps1', 'scripts/obs-import-lib.ps1', 'third_party/native-lock.json', '.github/workflows/native.yml']
+    paths: ['native/**', 'scripts/bootstrap.ps1', 'scripts/*exports.ps1', 'scripts/obs-import-lib.ps1', 'third_party/native-lock.json', '.github/workflows/native.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,6 +17,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Test export-table parser
+        shell: pwsh
+        run: ./scripts/test-exports.ps1
       - name: Build original libobs host and test protocol
         shell: pwsh
         run: ./scripts/bootstrap.ps1 -Native
