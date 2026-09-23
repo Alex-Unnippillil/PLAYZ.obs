@@ -551,7 +551,7 @@ impl Core {
         if self.is_busy() {
             return Err("Relink after recording has stopped".into());
         }
-        let source = paths::existing_media(&source)?;
+        let source = paths::registered_relink(&id, &source)?;
         let probe = self.media.probe(&source).await?;
         if !probe.compatible() {
             return Err("Relink requires a compatible H.264/AAC master".into());

@@ -70,7 +70,7 @@ $allowed = @('obs-ffmpeg','obs-x264','obs-outputs','win-capture','win-wasapi','o
 Get-ChildItem "$Obs/obs-plugins/64bit" -File | Where-Object { $_.BaseName -notin $allowed } | Remove-Item -Force
 Get-ChildItem "$Obs/data/obs-plugins" -Directory | Where-Object { $_.Name -notin $allowed } | Remove-Item -Recurse -Force
 Get-ChildItem "$Obs/bin/64bit" -Filter 'obs64.exe' | Remove-Item -Force
-$inventory = Get-ChildItem $Runtime -File -Recurse | ForEach-Object {
+$inventory = Get-ChildItem $Runtime -File -Recurse | Where-Object { $_.FullName -ne (Join-Path $Runtime 'provenance.json') } | ForEach-Object {
   @{ path = [IO.Path]::GetRelativePath($Runtime, $_.FullName).Replace('\','/'); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); size = $_.Length }
 }
 @{ schema_version = 1; components = $manifest; files = @($inventory) } | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8 "$Runtime/provenance.json"

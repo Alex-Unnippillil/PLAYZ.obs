@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use serde::Serialize;
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     path::{Component, Path, PathBuf},
 };
 
@@ -64,6 +64,33 @@ pub fn existing_media(path: &Path) -> Result<PathBuf> {
     }
     Ok(fs::canonicalize(path)?)
 }
+/// Relinking accepts a moved PLAYZ directory, not an arbitrary media folder
+/// where future recovery could overwrite an unrelated manifest/playback asset.
+pub fn registered_relink(id: &str, path: &Path) -> Result<PathBuf> {
+    validate_id(id)?;
+    let path = existing_media(path)?;
+    let folder = path.parent().ok_or("Recording has no parent directory")?;
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if folder.file_name().and_then(|n| n.to_str()) != Some(id)
+        || !matches!(name, "master.mkv" | "master.mp4")
+    {
+        return Err("Relink the original master inside its complete PLAYZ UUID folder. Use Import for unrelated media.".into());
+    }
+    let manifest = folder.join("manifest.json");
+    local_path(&manifest)?;
+    let file = fs::File::open(&manifest)?;
+    if file.metadata()?.len() > 1024 * 1024 {
+        return Err("Recording manifest exceeds its size limit".into());
+    }
+    let value: serde_json::Value = serde_json::from_reader(file.take(1024 * 1024 + 1))?;
+    if value["schema_version"] != 1
+        || value["recording"]["id"].as_str() != Some(id)
+        || value["master_name"].as_str() != Some(name)
+    {
+        return Err("The selected master does not match this recording's manifest".into());
+    }
+    Ok(path)
+}
 pub fn validate_id(id: &str) -> Result<()> {
     uuid::Uuid::parse_str(id)
         .map(|_| ())
@@ -112,6 +139,29 @@ mod tests {
         assert!(local_path(Path::new("relative/clip.mkv")).is_err());
         let d = tempfile::tempdir().unwrap();
         assert!(local_path(&d.path().join("../outside")).is_err());
+    }
+    #[test]
+    fn relink_requires_owned_folder_and_matching_manifest() {
+        let d = tempfile::tempdir().unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let folder = d.path().join(&id);
+        fs::create_dir(&folder).unwrap();
+        let master = folder.join("master.mkv");
+        fs::write(&master, b"fixture").unwrap();
+        assert!(registered_relink(&id, &master).is_err());
+        let manifest = folder.join("manifest.json");
+        atomic_json(
+            &manifest,
+            &serde_json::json!({
+                "schema_version": 1, "recording": {"id": id}, "master_name": "master.mkv"
+            }),
+        )
+        .unwrap();
+        assert!(registered_relink(&id, &master).is_ok());
+        assert!(registered_relink(&uuid::Uuid::new_v4().to_string(), &master).is_err());
+        atomic_json(&manifest, &serde_json::json!({"schema_version": 99})).unwrap();
+        assert!(registered_relink(&id, &master).is_err());
+        assert_eq!(fs::read(master).unwrap(), b"fixture");
     }
     #[test]
     fn atomic_no_overwrite() {

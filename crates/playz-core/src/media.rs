@@ -235,15 +235,19 @@ impl Media {
         request: &ExportRequest,
         control: Control,
     ) -> Result<Probe> {
+        if control.cancel.load(Ordering::Acquire) {
+            return Err(Error::Cancelled);
+        }
+        // A matching codec/duration does not establish ownership after a crash.
+        // Until receipt-backed reconciliation is implemented, fail closed rather
+        // than falsely adopting an unrelated user file as a successful job.
+        if output.exists() {
+            return Err("The export destination already exists. It was preserved and was not adopted as this job. Review it in the recording's exports folder or queue a new export.".into());
+        }
         let source = self.probe(master).await?;
         request.validate(source.duration_ms)?;
         if !source.compatible() {
             return Err("This first build exports H.264/AAC sources only".into());
-        }
-        if output.exists() {
-            let existing = self.probe(output).await?;
-            validate_export(&existing, request)?;
-            return Ok(existing);
         }
         if temporary.exists() {
             tokio::fs::remove_file(temporary).await?;

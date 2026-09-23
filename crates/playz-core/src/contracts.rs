@@ -241,7 +241,9 @@ pub struct ExportRequest {
 }
 impl ExportRequest {
     pub fn validate(&self, duration_ms: f64) -> Result<(), String> {
-        if !self.start_ms.is_finite()
+        if !duration_ms.is_finite()
+            || duration_ms <= 0.0
+            || !self.start_ms.is_finite()
             || !self.end_ms.is_finite()
             || self.start_ms < 0.0
             || self.end_ms - self.start_ms < 250.0
@@ -251,7 +253,27 @@ impl ExportRequest {
                 "Choose a trim interval of at least 0.25 seconds within this recording".into(),
             );
         }
-        if self.name.trim().is_empty()
+        let stem = self
+            .name
+            .split('.')
+            .next()
+            .unwrap_or("")
+            .to_ascii_uppercase();
+        let reserved = matches!(
+            stem.as_str(),
+            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+        ) || ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(*prefix).is_some_and(|suffix| {
+                matches!(
+                    suffix,
+                    "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            })
+        });
+        if reserved
+            || self.name.ends_with('.')
+            || self.name.ends_with(' ')
+            || self.name.trim().is_empty()
             || self.name.len() > 100
             || self
                 .name
@@ -314,6 +336,26 @@ mod tests {
         r.start_ms = 0.0;
         r.name = "../secret".into();
         assert!(r.validate(2000.0).is_err());
+    }
+    #[test]
+    fn export_rejects_windows_devices_and_invalid_duration() {
+        let mut request = ExportRequest {
+            recording_id: uuid::Uuid::new_v4().to_string(),
+            start_ms: 0.0,
+            end_ms: 1000.0,
+            mode: ExportMode::Accurate,
+            name: "safe clip".into(),
+        };
+        assert!(request.validate(f64::NAN).is_err());
+        assert!(request.validate(f64::INFINITY).is_err());
+        for name in [
+            "CON", "nul.mp4", "LPT1", "com¹", "CONOUT$", "clip.", "clip ",
+        ] {
+            request.name = name.into();
+            assert!(request.validate(2000.0).is_err(), "accepted {name}");
+        }
+        request.name = "勝利 — round 2".into();
+        assert!(request.validate(2000.0).is_ok());
     }
     #[test]
     fn unknown_setting_fields_fail() {
