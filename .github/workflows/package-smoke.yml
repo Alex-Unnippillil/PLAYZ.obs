@@ -1,12 +1,9 @@
-name: Smoke test an existing unsigned package
+name: Verify an existing unsigned package
 on:
-  push:
-    branches: [work/local-recorder]
-    paths: ['.github/workflows/package-smoke.yml', 'scripts/test-installed*.ps1']
   workflow_dispatch:
     inputs:
       artifact_id:
-        description: Existing package artifact from this repository
+        description: Package artifact ID from this repository
         required: true
         type: string
       sha256:
@@ -25,19 +22,21 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 12
     env:
-      PACKAGE_ARTIFACT: ${{ inputs.artifact_id || '10775382652' }}
-      PACKAGE_SHA256: ${{ inputs.sha256 || '1093ffdaaaf785d18808372c4ab4c866afed49ab522f52d622502334dae5e140' }}
-      PACKAGE_COMMIT: ${{ inputs.source_commit || '553672a973f7d39131707045f75db4fcecaeb608' }}
+      PACKAGE_ARTIFACT: ${{ inputs.artifact_id }}
+      PACKAGE_SHA256: ${{ inputs.sha256 }}
+      PACKAGE_COMMIT: ${{ inputs.source_commit }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Download only the explicitly identified repository artifact
+      - name: Download the explicitly identified repository artifact
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           [[ "$PACKAGE_ARTIFACT" =~ ^[0-9]+$ ]]
+          [[ "$PACKAGE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$PACKAGE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           gh api "repos/Alex-Unnippillil/PLAYZ.obs/actions/artifacts/$PACKAGE_ARTIFACT/zip" > package.zip
       - name: Verify archive, source identity and installer bytes
         shell: python
@@ -73,4 +72,4 @@ jobs:
           path: |
             artifacts/tested-package.json
             artifacts/installed-smoke/
-          retention-days: 7
+          retention-days: 14

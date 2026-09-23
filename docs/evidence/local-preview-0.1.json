@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "classification": "unsigned_local_engineering_preview",
+  "production_release_approved": false,
+  "installer": {
+    "name": "PLAYZ_0.1.0_x64-setup.exe",
+    "source_commit": "553672a973f7d39131707045f75db4fcecaeb608",
+    "sha256": "0246b96abc885d6478c43ddb6d7fe2c439270866aed5a20e9f35eea0cf7418c9",
+    "size_bytes": 320670968,
+    "authenticode": "NotSigned",
+    "artifact_id": 10775382652,
+    "artifact_zip_sha256": "1093ffdaaaf785d18808372c4ab4c866afed49ab522f52d622502334dae5e140"
+  },
+  "latest_test_driver_commit": "a4ed28c2b49694207904cd0ab82691bd4ada306e",
+  "runtime_comparison": {
+    "base": "553672a973f7d39131707045f75db4fcecaeb608",
+    "head": "a4ed28c2b49694207904cd0ab82691bd4ada306e",
+    "application_native_and_dependency_sources_unchanged": true,
+    "changes": ["test drivers", "CI workflows", "documentation"]
+  },
+  "installed_workflow": {
+    "run_id": 35917885507,
+    "job_id": 107374042581,
+    "result": "success",
+    "artifact_id": 10775782452,
+    "artifact_zip_sha256": "a2d17f7e627b9f18c9e760c9df8b74ad8336bbebab1ccfe05b3fa50bed678275",
+    "native_picker_import": true,
+    "webview2_playhead_advancement": true,
+    "native_export_completion": true,
+    "single_instance": true,
+    "safe_idle_quit_and_persisted_library_after_restart": true
+  },
+  "selected_window_capture_rerun": {
+    "source_commit": "a4ed28c2b49694207904cd0ab82691bd4ada306e",
+    "run_id": 35917885496,
+    "job_id": 107374043210,
+    "result": "success",
+    "actual_libobs_capture_finalize_export_catalog_reopen": true,
+    "audio_enabled": false,
+    "real_game": false
+  },
+  "core_rerun": {
+    "source_commit": "a4ed28c2b49694207904cd0ab82691bd4ada306e",
+    "run_id": 35917885805,
+    "windows_job_id": 107374044522,
+    "windows_result": "success"
+  },
+  "remaining_gates": [
+    "clean Windows 11 offline installation",
+    "real game and recorded audio",
+    "NVIDIA AMD Intel hardware qualification",
+    "two-hour sessions and measured AV drift/performance",
+    "complete fault, upgrade, restore and large-file playback matrix",
+    "complete SBOM, corresponding-source and license review",
+    "authorized Authenticode signing",
+    "live League automation and synchronized event ingestion"
+  ]
+}
