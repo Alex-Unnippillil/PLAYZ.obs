@@ -42,7 +42,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Formatting failed' }
           cargo test -p playz-core --locked --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
-          cargo run -p playz-core --locked --bin generate-contracts
+          cargo run -p playz-core --locked --bin generate-contracts -- --check
           if ($LASTEXITCODE -ne 0) { throw 'Contract generation failed' }
           ./scripts/test-exports.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

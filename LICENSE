@@ -1,0 +1,23 @@
+PLAYZ original application source
+Copyright (C) 2026 PLAYZ contributors
+
+The original PLAYZ source files marked SPDX-License-Identifier:
+GPL-2.0-or-later are free software: you may redistribute and/or modify
+those files under the GNU General Public License as published by the
+Free Software Foundation, either version 2 of the License, or (at your
+option) any later version.
+
+The original PLAYZ source is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+Public License for details.
+
+The complete GNU GPL version 2 terms are available at:
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
+The native build also collects the full OBS GPL license in
+runtime/notices/OBS-COPYING.txt. Full license-text and notice aggregation
+for a distributable binary is tracked in RELEASE_CHECKLIST.md.
+
+This notice does not relicense OBS, FFmpeg, Microsoft redistributables,
+fonts, icons, or any other third-party material. Each third-party component
+retains its own license and corresponding-source/distribution obligations.
