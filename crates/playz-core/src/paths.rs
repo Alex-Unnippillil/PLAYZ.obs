@@ -85,12 +85,15 @@ pub fn finalize_new(temporary: &Path, destination: &Path) -> Result<()> {
     if temporary.parent() != destination.parent() {
         return Err("Finalization must remain on the same volume and folder".into());
     }
-    // Hard-link creation atomically refuses an existing destination. Unlike
-    // rename-overwrite this cannot destroy a user's file after a race.
+    // FlushFileBuffers requires GENERIC_WRITE on Windows. This opens the
+    // existing file without truncation; close the handle before publishing it.
     fs::OpenOptions::new()
         .read(true)
+        .write(true)
         .open(temporary)?
         .sync_all()?;
+    // Hard-link creation atomically refuses an existing destination. Unlike
+    // rename-overwrite this cannot destroy a user's file after a race.
     fs::hard_link(temporary, destination)?;
     fs::remove_file(temporary)?;
     Ok(())
@@ -119,9 +122,28 @@ mod tests {
         fs::write(&b, b"original").unwrap();
         assert!(finalize_new(&a, &b).is_err());
         assert_eq!(fs::read(&b).unwrap(), b"original");
+        assert_eq!(fs::read(&a).unwrap(), b"new");
         fs::remove_file(&b).unwrap();
         finalize_new(&a, &b).unwrap();
         assert_eq!(fs::read(&b).unwrap(), b"new");
+        assert!(!a.exists());
+    }
+    #[test]
+    fn finalization_refuses_different_folders() {
+        let d = tempfile::tempdir().unwrap();
+        let a = d.path().join("temp.mp4");
+        let sub = d.path().join("other");
+        fs::create_dir(&sub).unwrap();
+        fs::write(&a, b"preserve").unwrap();
+        assert!(finalize_new(&a, &sub.join("final.mp4")).is_err());
+        assert_eq!(fs::read(&a).unwrap(), b"preserve");
+    }
+    #[test]
+    fn finalization_missing_source_never_creates_destination() {
+        let d = tempfile::tempdir().unwrap();
+        let destination = d.path().join("final.mp4");
+        assert!(finalize_new(&d.path().join("missing.mp4"), &destination).is_err());
+        assert!(!destination.exists());
     }
     #[test]
     fn manifest_replacement_is_complete() {

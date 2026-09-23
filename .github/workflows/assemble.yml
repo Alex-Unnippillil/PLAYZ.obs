@@ -1,87 +1,52 @@
-name: Assemble first local build
+name: Core verification
 on:
   push:
-    branches: [work/local-recorder]
-    paths: [.github/workflows/assemble.yml, scripts/prepare-source.py]
+    branches: [main, work/local-recorder]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: assemble-local-build
-  cancel-in-progress: false
+  group: core-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  prepare:
-    if: github.repository == 'Alex-Unnippillil/PLAYZ.obs' && github.ref == 'refs/heads/work/local-recorder'
-    runs-on: windows-2022
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    outputs:
-      commit: ${{ steps.commit.outputs.commit }}
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Inspect remaining frontend type dependencies
-        shell: pwsh
-        run: |
-          foreach ($p in @('@types/react','@types/react-dom','@types/node')) { $v = npm view $p version; Write-Output "TYPE_PACKAGE $p $v" }
-      - name: Apply reviewed build corrections and resolve pinned crates
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          python scripts/prepare-source.py
-          if ($LASTEXITCODE -ne 0) { throw 'Source normalization failed' }
-          cargo fmt --all
-          if ($LASTEXITCODE -ne 0) { throw 'Rust formatting failed' }
-          cargo generate-lockfile
-          if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution failed' }
-      - name: Commit exact normalized sources and dependency lock
-        id: commit
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          git config user.name 'PLAYZ build automation'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Cargo.lock crates/playz-core apps/desktop/src-tauri/src apps/desktop/src-tauri/build.rs scripts/bootstrap.ps1
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 1) {
-            git commit -m 'build: normalize reviewed sources and lock Rust dependencies [skip ci]'
-            if ($LASTEXITCODE -ne 0) { throw 'Commit failed' }
-            git push origin HEAD:work/local-recorder
-            if ($LASTEXITCODE -ne 0) { throw 'Concurrent branch change; refusing to overwrite it' }
-          }
-          "commit=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+        with:
+          persist-credentials: false
+      - name: Archive exact reviewed sources
+        run: git archive --format=zip --output=playz-source.zip HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: playz-source-${{ github.sha }}
+          path: playz-source.zip
+          retention-days: 7
   core:
-    needs: prepare
-    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
       - name: Rust domain, persistence and protocol tests
         shell: pwsh
         run: |
+          cargo fmt --all --check
+          if ($LASTEXITCODE -ne 0) { throw 'Formatting failed' }
           cargo test -p playz-core --locked --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'Core tests failed' }
           cargo run -p playz-core --locked --bin generate-contracts
           if ($LASTEXITCODE -ne 0) { throw 'Contract generation failed' }
+          ./scripts/test-exports.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: generated-contracts
+          name: generated-contracts-${{ matrix.os }}
           path: apps/desktop/src/contracts.ts
-  native:
-    needs: prepare
-    runs-on: windows-2022
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: ${{ needs.prepare.outputs.commit }}
-      - name: Build and test pinned libobs host
-        shell: pwsh
-        run: ./scripts/bootstrap.ps1 -Native
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: assembled-native-runtime
-          path: apps/desktop/src-tauri/resources/runtime/
           retention-days: 7
