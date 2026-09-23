@@ -17,6 +17,6 @@ $evidence = Join-Path (Get-Location) 'artifacts/installed-smoke'
 $fixture = Join-Path (Get-Location) 'artifacts/installed-media-fixture'
 python tools/media-fixture/generate.py --runtime (Join-Path $directory 'runtime') --output $fixture
 if ($LASTEXITCODE -ne 0) { throw 'Installed FFmpeg fixture generation failed' }
-& powershell.exe -NoLogo -NoProfile -STA -File "$PSScriptRoot/test-installed-ui.ps1" -Executable (Join-Path $directory 'PLAYZ.exe') -EvidenceDirectory $evidence -MediaFile (Join-Path $fixture 'fixture.mkv')
+& powershell.exe -NoLogo -NoProfile -STA -File "$PSScriptRoot/test-installed-host.ps1" -Executable (Join-Path $directory 'PLAYZ.exe') -EvidenceDirectory $evidence -MediaFile (Join-Path $fixture 'fixture.mkv')
 if ($LASTEXITCODE -ne 0) { throw 'Actual installed-application UI workflow test failed' }
 Write-Output 'Hosted installed application import/play/export/restart workflow passed. Clean Windows 11 offline and real-game capture are separate gates.'
