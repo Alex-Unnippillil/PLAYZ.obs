@@ -6,7 +6,19 @@ function Save-WorkspaceView {
   Save-Window 'workspace-storage-budget'
   Invoke-Control 'How this estimate works'
   Invoke-Control 'Save current library view'
-  $inputControl = Wait-Control 'View name'
+  # The label text and edit can share a name; require the actual editable control.
+  $condition = [System.Windows.Automation.AndCondition]::new(
+    (Named-Condition 'View name'),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Edit))
+  $deadline = [DateTime]::UtcNow.AddSeconds(30)
+  do {
+    $inputControl = $script:window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    if ($null -ne $inputControl) { break }
+    Start-Sleep -Milliseconds 200
+  } while ([DateTime]::UtcNow -lt $deadline)
+  if ($null -eq $inputControl) { throw 'Saved-view dialog did not expose its name edit' }
   $value = [System.Windows.Automation.ValuePattern]$inputControl.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
   $value.SetValue('Local review')
   Invoke-Control 'Save view'
