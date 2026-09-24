@@ -335,10 +335,15 @@ impl Core {
             .recording_id
             .ok_or("No recording is active")?;
         self.change(|s| s.phase = Phase::Finalizing);
-        self.library
-            .lifecycle(id.clone(), Phase::Finalizing, None, None, None, None)
-            .await?;
-        let result = self.stop_inner(&id).await;
+        // A failed lifecycle transaction must enter the same cleanup path as
+        // recorder/finalization failures, not leave capture busy indefinitely.
+        let result = async {
+            self.library
+                .lifecycle(id.clone(), Phase::Finalizing, None, None, None, None)
+                .await?;
+            self.stop_inner(&id).await
+        }
+        .await;
         if let Err(e) = &result {
             self.fail_current(e).await;
         } else {
@@ -887,3 +892,7 @@ fn redact_error(error: &Error) -> &'static str {
         Error::Message(_) => "operation_error",
     }
 }
+
+#[cfg(test)]
+#[path = "core_tests.rs"]
+mod tests;

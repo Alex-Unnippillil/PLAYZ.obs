@@ -2,6 +2,7 @@
 use crate::{
     contracts::{ExportMode, ExportRequest},
     error::{Error, Result},
+    media_receipt::ExportReceipt,
     paths,
     process::{self, ProcessJob},
 };
@@ -53,6 +54,17 @@ impl Default for Control {
             pause: Arc::new(AtomicBool::new(false)),
             progress_ms: Arc::new(AtomicU64::new(0)),
         }
+    }
+}
+impl Control {
+    pub(crate) fn checkpoint(&self) -> Result<()> {
+        if self.cancel.load(Ordering::Acquire) {
+            return Err(Error::Cancelled);
+        }
+        if self.pause.load(Ordering::Acquire) {
+            return Err(Error::Paused);
+        }
+        Ok(())
     }
 }
 impl Media {
@@ -235,14 +247,33 @@ impl Media {
         request: &ExportRequest,
         control: Control,
     ) -> Result<Probe> {
-        if control.cancel.load(Ordering::Acquire) {
-            return Err(Error::Cancelled);
+        control.checkpoint()?;
+        let receipt = ExportReceipt::new(master, output, temporary, request)?;
+        if output.try_exists()? {
+            if !receipt.verify(output, &control).await? {
+                return Err("The export destination already exists without a matching receipt. It was preserved and was not adopted as this job. Queue a new export or inspect the existing clip.".into());
+            }
+            let probe = self.probe(output).await?;
+            request.validate(request.end_ms)?;
+            validate_export(&probe, request)?;
+            control.checkpoint()?;
+            return Ok(probe);
         }
-        // A matching codec/duration does not establish ownership after a crash.
-        // Until receipt-backed reconciliation is implemented, fail closed rather
-        // than falsely adopting an unrelated user file as a successful job.
-        if output.exists() {
-            return Err("The export destination already exists. It was preserved and was not adopted as this job. Review it in the recording's exports folder or queue a new export.".into());
+        // Also recover a verified temporary clip if the process ended after the
+        // receipt was flushed but before the no-overwrite publication step.
+        let has_receipt = receipt.exists().await?;
+        if has_receipt && temporary.try_exists()? {
+            if !receipt.verify(temporary, &control).await? {
+                return Err(
+                    "Export receipt disappeared during recovery; existing files were preserved".into(),
+                );
+            }
+            let probe = self.probe(temporary).await?;
+            request.validate(request.end_ms)?;
+            validate_export(&probe, request)?;
+            control.checkpoint()?;
+            paths::finalize_new(temporary, output)?;
+            return Ok(probe);
         }
         let source = self.probe(master).await?;
         request.validate(source.duration_ms)?;
@@ -252,10 +283,13 @@ impl Media {
         if temporary.exists() {
             tokio::fs::remove_file(temporary).await?;
         }
-        self.run(export_arguments(master, temporary, request), control)
+        control.checkpoint()?;
+        self.run(export_arguments(master, temporary, request), control.clone())
             .await?;
         let probe = self.probe(temporary).await?;
         validate_export(&probe, request)?;
+        receipt.save(temporary, &control).await?;
+        control.checkpoint()?;
         paths::finalize_new(temporary, output)?;
         Ok(probe)
     }
