@@ -44,7 +44,8 @@ impl ExportReceipt {
             || master == temporary
         {
             return Err(
-                "Export paths must be distinct; temporary and final clips must share a folder".into(),
+                "Export paths must be distinct; temporary and final clips must share a folder"
+                    .into(),
             );
         }
         // Store only a digest of the paths/intent, never raw user paths or titles.
@@ -73,7 +74,9 @@ impl ExportReceipt {
             Err(e) => return Err(e.into()),
         };
         if !file.metadata().await?.is_file() {
-            return Err("Export receipt is not a regular file; existing files were preserved".into());
+            return Err(
+                "Export receipt is not a regular file; existing files were preserved".into(),
+            );
         }
         let mut bytes = Vec::new();
         file.take(RECEIPT_LIMIT + 1).read_to_end(&mut bytes).await?;
@@ -207,7 +210,12 @@ mod tests {
         let output = d.path().join("clip.mp4");
         let receipt = ExportReceipt::new(&master, &output, &temporary, &request()).unwrap();
         fs::write(&temporary, b"verified bytes").unwrap();
-        assert!(!receipt.verify(&temporary, &Control::default()).await.unwrap());
+        assert!(
+            !receipt
+                .verify(&temporary, &Control::default())
+                .await
+                .unwrap()
+        );
         receipt.save(&temporary, &Control::default()).await.unwrap();
         let json = fs::read_to_string(&receipt.path).unwrap();
         assert!(!json.contains("private master"));
@@ -276,9 +284,17 @@ mod tests {
         )
         .unwrap();
         fs::write(&temporary, b"verified bytes").unwrap();
-        for bytes in [b"{truncated".to_vec(), vec![b' '; RECEIPT_LIMIT as usize + 1]] {
+        for bytes in [
+            b"{truncated".to_vec(),
+            vec![b' '; RECEIPT_LIMIT as usize + 1],
+        ] {
             fs::write(&receipt.path, &bytes).unwrap();
-            assert!(receipt.verify(&temporary, &Control::default()).await.is_err());
+            assert!(
+                receipt
+                    .verify(&temporary, &Control::default())
+                    .await
+                    .is_err()
+            );
             assert!(receipt.save(&temporary, &Control::default()).await.is_err());
             assert_eq!(fs::read(&receipt.path).unwrap(), bytes);
         }
@@ -288,7 +304,12 @@ mod tests {
             serde_json::from_slice(&fs::read(&receipt.path).unwrap()).unwrap();
         value["schema_version"] = serde_json::json!(99);
         paths::atomic_json(&receipt.path, &value).unwrap();
-        assert!(receipt.verify(&temporary, &Control::default()).await.is_err());
+        assert!(
+            receipt
+                .verify(&temporary, &Control::default())
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -326,8 +347,13 @@ mod tests {
         assert!(ExportReceipt::new(&master, &output, &master, &request()).is_err());
         assert!(ExportReceipt::new(&master, &output, &output, &request()).is_err());
         assert!(
-            ExportReceipt::new(&master, &output, &d.path().join("other/temp.mp4"), &request())
-                .is_err()
+            ExportReceipt::new(
+                &master,
+                &output,
+                &d.path().join("other/temp.mp4"),
+                &request()
+            )
+            .is_err()
         );
     }
 }

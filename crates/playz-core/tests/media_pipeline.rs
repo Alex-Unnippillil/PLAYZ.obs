@@ -164,7 +164,9 @@ async fn real_export_recovers_both_publication_boundaries_without_reencoding() {
     assert!(result.unwrap_err().to_string().contains("not adopted"));
     assert_eq!(fs::read(&output).unwrap(), changed);
     assert_eq!(digest(&master), original);
-    println!("Receipt recovery passed both publication boundaries without FFmpeg; tampering rejected; master unchanged.");
+    println!(
+        "Receipt recovery passed both publication boundaries without FFmpeg; tampering rejected; master unchanged."
+    );
 }
 
 #[tokio::test]
@@ -223,7 +225,13 @@ async fn catalog_restart_reconciles_a_published_export() {
     drop(core);
     let reopened = Core::open(runtime, data, videos).await.unwrap();
     assert_eq!(
-        reopened.library.job(job.id.clone()).await.unwrap().view.state,
+        reopened
+            .library
+            .job(job.id.clone())
+            .await
+            .unwrap()
+            .view
+            .state,
         "queued"
     );
     reopened.spawn_workers();
@@ -231,5 +239,7 @@ async fn catalog_restart_reconciles_a_published_export() {
     reopened.shutdown().await.unwrap();
     assert_eq!(digest(&output), encoded);
     assert_eq!(digest(&master), original);
-    println!("Persisted running job reconciled to queued then completed after reopening the real catalog; clip and master hashes unchanged.");
+    println!(
+        "Persisted running job reconciled to queued then completed after reopening the real catalog; clip and master hashes unchanged."
+    );
 }

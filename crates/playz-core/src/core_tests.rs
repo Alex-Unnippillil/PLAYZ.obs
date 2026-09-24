@@ -67,6 +67,9 @@ async fn stop_transaction_failure_clears_busy_and_preserves_master() {
         core.library.get(id).await.unwrap().view.phase,
         Phase::Interrupted
     );
-    assert_eq!(std::fs::read(master).unwrap(), b"preserved interrupted master");
+    assert_eq!(
+        std::fs::read(master).unwrap(),
+        b"preserved interrupted master"
+    );
     core.shutdown().await.unwrap();
 }

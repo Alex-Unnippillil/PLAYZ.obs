@@ -265,7 +265,8 @@ impl Media {
         if has_receipt && temporary.try_exists()? {
             if !receipt.verify(temporary, &control).await? {
                 return Err(
-                    "Export receipt disappeared during recovery; existing files were preserved".into(),
+                    "Export receipt disappeared during recovery; existing files were preserved"
+                        .into(),
                 );
             }
             let probe = self.probe(temporary).await?;
@@ -284,8 +285,11 @@ impl Media {
             tokio::fs::remove_file(temporary).await?;
         }
         control.checkpoint()?;
-        self.run(export_arguments(master, temporary, request), control.clone())
-            .await?;
+        self.run(
+            export_arguments(master, temporary, request),
+            control.clone(),
+        )
+        .await?;
         let probe = self.probe(temporary).await?;
         validate_export(&probe, request)?;
         receipt.save(temporary, &control).await?;
