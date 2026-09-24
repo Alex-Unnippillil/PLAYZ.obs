@@ -107,3 +107,139 @@ async fn real_media_pipeline_preserves_master_and_validates_trim_frames() {
         "Real media passed: {count} frames; source frame IDs {first}..{last}; non-silent audio; master hash unchanged; cancellation preserved source."
     );
 }
+
+#[tokio::test]
+#[ignore = "Run scripts/test-media.ps1 with the verified native runtime"]
+async fn real_export_recovers_both_publication_boundaries_without_reencoding() {
+    let runtime = PathBuf::from(std::env::var("PLAYZ_TEST_RUNTIME").unwrap());
+    let fixture = PathBuf::from(std::env::var("PLAYZ_TEST_MEDIA").unwrap()).join("fixture.mkv");
+    let directory = tempfile::tempdir().unwrap();
+    let master = directory.path().join("master.mkv");
+    fs::copy(fixture, &master).unwrap();
+    let original = digest(&master);
+    let media = Media::new(&runtime);
+    let request = ExportRequest {
+        recording_id: uuid::Uuid::new_v4().to_string(),
+        start_ms: 1000.0,
+        end_ms: 3000.0,
+        mode: ExportMode::Accurate,
+        name: "recovery".into(),
+    };
+    let output = directory.path().join("clip.mp4");
+    let temporary = directory.path().join("clip.tmp.mp4");
+    media
+        .export(&master, &output, &temporary, &request, Control::default())
+        .await
+        .unwrap();
+    let encoded = digest(&output);
+    assert!(temporary.with_extension("receipt.json").is_file());
+    // A new controller has no encoder executable: success must come from
+    // receipt verification and real ffprobe, not silently re-encoding a clip.
+    let resumed = Media {
+        ffmpeg: directory.path().join("absent-encoder.exe"),
+        ffprobe: media.ffprobe.clone(),
+    };
+    let probe = resumed
+        .export(&master, &output, &temporary, &request, Control::default())
+        .await
+        .unwrap();
+    assert!((probe.duration_ms - 2000.0).abs() < 150.0);
+    assert_eq!(digest(&output), encoded);
+    // Model termination after receipt commit and before output publication.
+    fs::rename(&output, &temporary).unwrap();
+    resumed
+        .export(&master, &output, &temporary, &request, Control::default())
+        .await
+        .unwrap();
+    assert!(!temporary.exists());
+    assert_eq!(digest(&output), encoded);
+    // Replacing a clip with different bytes of the same length is not adopted.
+    let mut changed = fs::read(&output).unwrap();
+    let last = changed.len() - 1;
+    changed[last] ^= 1;
+    fs::write(&output, &changed).unwrap();
+    let result = resumed
+        .export(&master, &output, &temporary, &request, Control::default())
+        .await;
+    assert!(result.unwrap_err().to_string().contains("not adopted"));
+    assert_eq!(fs::read(&output).unwrap(), changed);
+    assert_eq!(digest(&master), original);
+    println!(
+        "Receipt recovery passed both publication boundaries without FFmpeg; tampering rejected; master unchanged."
+    );
+}
+
+#[tokio::test]
+#[ignore = "Run scripts/test-media.ps1 with the verified native runtime"]
+async fn catalog_restart_reconciles_a_published_export() {
+    use playz_core::Core;
+    use std::{sync::Arc, time::Duration};
+
+    async fn completed(core: &Arc<Core>, id: &str) {
+        tokio::time::timeout(Duration::from_secs(45), async {
+            loop {
+                let job = core.library.job(id.to_owned()).await.unwrap();
+                assert_ne!(job.view.state, "failed", "{:?}", job.view.error);
+                if job.view.state == "completed" {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    let runtime = PathBuf::from(std::env::var("PLAYZ_TEST_RUNTIME").unwrap());
+    let fixture = PathBuf::from(std::env::var("PLAYZ_TEST_MEDIA").unwrap()).join("fixture.mkv");
+    let directory = tempfile::tempdir().unwrap();
+    let data = directory.path().join("data");
+    let videos = directory.path().join("videos");
+    let core = Core::open(runtime.clone(), data.clone(), videos.clone())
+        .await
+        .unwrap();
+    let recording = core.import_file(fixture).await.unwrap();
+    let master = core.master_path(recording.id.clone()).await.unwrap();
+    let original = digest(&master);
+    let job = core
+        .queue_export(ExportRequest {
+            recording_id: recording.id,
+            start_ms: 1000.0,
+            end_ms: 3000.0,
+            mode: ExportMode::Accurate,
+            name: "restart".into(),
+        })
+        .await
+        .unwrap();
+    core.spawn_workers();
+    completed(&core, &job.id).await;
+    let output = core.export_path(job.id.clone()).await.unwrap();
+    let encoded = digest(&output);
+    core.shutdown().await.unwrap();
+    // Restore the durable state observed if termination occurred after output
+    // publication and before the database's completed transaction.
+    core.library
+        .job_state(job.id.clone(), "running", 99.0, None)
+        .await
+        .unwrap();
+    drop(core);
+    let reopened = Core::open(runtime, data, videos).await.unwrap();
+    assert_eq!(
+        reopened
+            .library
+            .job(job.id.clone())
+            .await
+            .unwrap()
+            .view
+            .state,
+        "queued"
+    );
+    reopened.spawn_workers();
+    completed(&reopened, &job.id).await;
+    reopened.shutdown().await.unwrap();
+    assert_eq!(digest(&output), encoded);
+    assert_eq!(digest(&master), original);
+    println!(
+        "Persisted running job reconciled to queued then completed after reopening the real catalog; clip and master hashes unchanged."
+    );
+}

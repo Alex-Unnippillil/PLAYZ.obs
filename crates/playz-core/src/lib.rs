@@ -5,6 +5,7 @@ pub mod error;
 pub mod league;
 pub mod library;
 pub mod media;
+mod media_receipt;
 pub mod paths;
 pub mod process;
 pub mod recorder;

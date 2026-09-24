@@ -4,6 +4,10 @@
 
 The exact tested installer, hashes, build source and independently passing installed-workflow run are recorded in [the local preview handoff](docs/LOCAL_PREVIEW_HANDOFF.md). The tested installer is from `553672a973f7d39131707045f75db4fcecaeb608`; later changes through the handoff are test/CI/documentation only, not application code. New CI packages retain their own commit and hash; do not relabel an older artifact.
 
+## Next-version development
+
+Receipt-backed export recovery and stop-transaction failure cleanup are implemented in the next source increment. See [export recovery behaviour and verification](docs/EXPORT_RECOVERY.md). The historical installer below predates these code changes; fresh build/test evidence is required for the increment.
+
 ## Evidence
 
 | Check | Exact source / Actions run | Result and scope |
@@ -31,7 +35,7 @@ Hosted environment is Windows Server 2022, not a clean Windows 11 consumer machi
 | Manifests/recovery | `core.rs`, `library.rs`, `paths.rs` | Versioned manifests and known interrupted-entry reconciliation. Broader external-move/reparse-race/watch tests remain open. |
 | Playback | `media.rs`, scoped asset command, Review | Compatible MKV→MP4 remux and actual packaged playback passed. Seek/speed/volume/fullscreen/resume implemented; multi-gigabyte and edition/codec matrix open. |
 | Export | `media.rs`, Review and Export Queue | Actual UI export and decoded accurate-trim tests passed. Fast mode is keyframe-aligned, not exact. Persistent queue/cancel/retry; heavy work pauses/restarts during capture. |
-| Output ownership | `media.rs`, `contracts.rs`, `tests/export_safety.rs` | Existing ambiguous output fails closed, never overwritten/adopted; pre-cancel before spawn; Windows filename validation. Receipt-backed automatic final-output adoption not implemented. |
+| Output ownership/recovery | `media.rs`, `media_receipt.rs`, `tests/export_safety.rs`, `tests/media_pipeline.rs` | Receipt-backed SHA-256 reconciliation of published or verified temporary clips. Unknown/changed output fails closed; cancellation/pause checks during hashing. New tests require exact-commit execution evidence; see `docs/EXPORT_RECOVERY.md`. |
 | Editing/bookmarks | Library commands and UI | Titles, tags, notes, favorites, resume and bookmark CRUD/import. Live bookmark survived catalog reopen in capture test. |
 | Relink/removal | `paths::registered_relink`, core | Relink requires complete original UUID folder and matching manifest. Unrelated videos use Import. Removal hides entry while preserving media/exports. |
 | Shortcuts/tray/quit/instance | Tauri host | Maintained plugins. Installed single-instance/idle-quit/restart passed; active-capture hotkey/tray/fault scenarios still require acceptance. |
