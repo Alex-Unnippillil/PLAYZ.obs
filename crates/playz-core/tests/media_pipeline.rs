@@ -304,16 +304,27 @@ async fn removed_recording_restores_after_core_restart_without_changing_media() 
     core.shutdown().await.unwrap();
     drop(core);
     let reopened = Core::open(runtime, data, videos).await.unwrap();
-    let active = reopened.library.list("".into(), 0, 50, false).await.unwrap();
+    let active = reopened
+        .library
+        .list("".into(), 0, 50, false)
+        .await
+        .unwrap();
     assert_eq!(active.total, 0);
-    let removed = reopened.library.list_removed("fixture".into(), 0, 50, false).await.unwrap();
+    let removed = reopened
+        .library
+        .list_removed("fixture".into(), 0, 50, false)
+        .await
+        .unwrap();
     assert_eq!(removed.total, 1);
     assert_eq!(removed.items[0].id, id);
     reopened.library.restore_entry(id.clone()).await.unwrap();
     let restored = reopened.library.get(id.clone()).await.unwrap();
     assert_eq!(restored.view.resume_ms, 1500.0);
     assert_eq!(restored.view.phase, playz_core::contracts::Phase::Ready);
-    assert_eq!(reopened.library.bookmarks(id.clone()).await.unwrap()[0].id, bookmark.id);
+    assert_eq!(
+        reopened.library.bookmarks(id.clone()).await.unwrap()[0].id,
+        bookmark.id
+    );
     let asset = reopened.playback_path(id).await.unwrap();
     let probe = reopened.media.probe(&asset).await.unwrap();
     assert!(probe.compatible());
@@ -323,5 +334,7 @@ async fn removed_recording_restores_after_core_restart_without_changing_media() 
     assert_eq!(digest(&master), before_master);
     assert_eq!(digest(&playback), before_playback);
     assert_eq!(digest(&output), before_export);
-    println!("Removed entry survived Core restart and restored with bookmark/resume/export intact; all three media hashes unchanged.");
+    println!(
+        "Removed entry survived Core restart and restored with bookmark/resume/export intact; all three media hashes unchanged."
+    );
 }

@@ -111,9 +111,13 @@ it('resets pagination when changing collection or search filters', async () => {
   await waitFor(() => expect(api.listRemoved).toHaveBeenLastCalledWith('', 0, false));
   expect(vi.mocked(api.listRemoved).mock.calls.some(call => call[1] === 50)).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Show active recordings' }));
-  await waitFor(() => expect(api.list).toHaveBeenLastCalledWith('', 0, false));
-  fireEvent.click(await screen.findByRole('button', { name: 'Next page' }));
-  await waitFor(() => expect(api.list).toHaveBeenLastCalledWith('', 50, false));
+  // A still-fresh first page may come from cache without another native call.
+  // Assert the visible pagination, not a redundant request.
+  expect(await screen.findByText('Showing 1–1 of 101')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  expect(await screen.findByText('Showing 51–51 of 101')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
   fireEvent.change(screen.getByRole('textbox', { name: 'Search recordings' }), { target: { value: 'changed' } });
   await waitFor(() => expect(api.list).toHaveBeenLastCalledWith('changed', 0, false));
   expect(vi.mocked(api.list).mock.calls.some(call => call[0] === 'changed' && call[1] === 50)).toBe(false);
