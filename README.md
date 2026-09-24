@@ -12,6 +12,14 @@ Press **Record**, then **Stop recording**. The native host records an MKV master
 
 A short test recording and export are essential before a longer session. **Device discovery is not hardware validation.** Failed game/window capture never silently widens to desktop capture. The software encoder uses CPU resources; no performance-impact claims are made.
 
+## Simple defaults, advanced controls
+
+Use **Compact**, **Balanced** or **Smooth** to fill recording-quality fields, then **Save profile**. These presets never change the microphone, capture source or encoder. Custom bitrate/resolution, disk reserve, global shortcuts and tray behavior remain under **Advanced settings**. Leaving an unsaved profile through in-app navigation asks whether to stay or discard it.
+
+Open **Quick actions** or press **Ctrl+K** outside text fields to find a workspace. During review, select up to **15 or 30 seconds around the playhead**, adjust trim-in/out and queue an accurate export. Fast keyframe-aligned copy is an explicit option, not a frame-accurate shortcut. Focus the player for **J/K/L** seek/play and **I/O/B** trim/bookmark controls. Recovery, relinking and reversible removal remain under **Recording tools**. Filter existing exports by progress, completion or attention without changing their stored jobs.
+
+See [UI controls, safety boundaries and test procedures](docs/UI_EXPERIENCE.md). The ordinary browser preview deliberately has no recording backend; renderer test fixtures are not shipped as product data.
+
 ## Implemented source workflows
 
 - Explicit window/game capture through libobs, H.264/AAC SDR profiles, optional microphone, serialized native supervision and disk-reserve checks.
@@ -53,7 +61,7 @@ TanStack queries run in `networkMode: always`; network loss must not suspend loc
 
 ## Documentation
 
-[Build](docs/BUILD.md) · [Architecture](docs/ARCHITECTURE.md) · [Recovery and privacy](docs/RECOVERY_PRIVACY.md) · [Acceptance procedure](docs/ACCEPTANCE.md) · [Dependency register](third_party/DEPENDENCIES.md) · [Status](IMPLEMENTATION_STATUS.md) · [Release gates](RELEASE_CHECKLIST.md)
+[UI guide](docs/UI_EXPERIENCE.md) · [Build](docs/BUILD.md) · [Architecture](docs/ARCHITECTURE.md) · [Recovery and privacy](docs/RECOVERY_PRIVACY.md) · [Acceptance procedure](docs/ACCEPTANCE.md) · [Dependency register](third_party/DEPENDENCIES.md) · [Status](IMPLEMENTATION_STATUS.md) · [Release gates](RELEASE_CHECKLIST.md)
 
 ## Licensing and distribution
 

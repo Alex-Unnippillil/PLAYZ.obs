@@ -35,25 +35,23 @@ function Invoke-Element($Control) {
     if ([DateTime]::UtcNow -ge $deadline) { throw "Control did not become enabled: $($Control.Current.Name)" }
     Start-Sleep -Milliseconds 200
   }
-  # WebView2 exposes aria-pressed collection buttons through TogglePattern,
-  # not InvokePattern. Use the actual supported UIA action, never a DOM override.
-  # https://www.w3.org/TR/core-aam-1.2/#role-map-button-pressed
+  # Use real accessibility actions, never a DOM override or synthetic backend.
   $pattern = $null
   if ($Control.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
-    ([System.Windows.Automation.InvokePattern]$pattern).Invoke()
-    return
+    ([System.Windows.Automation.InvokePattern]$pattern).Invoke(); return
   }
   if ($Control.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$pattern)) {
-    Write-Output "Installed UI: TogglePattern for $($Control.Current.Name)"
-    ([System.Windows.Automation.TogglePattern]$pattern).Toggle()
+    ([System.Windows.Automation.TogglePattern]$pattern).Toggle(); return
+  }
+  if ($Control.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$pattern)) {
+    $expand = [System.Windows.Automation.ExpandCollapsePattern]$pattern
+    if ($expand.Current.ExpandCollapseState -eq [System.Windows.Automation.ExpandCollapseState]::Expanded) { $expand.Collapse() } else { $expand.Expand() }
     return
   }
   throw "No supported action pattern for $($Control.Current.Name) ($($Control.Current.ControlType.ProgrammaticName))"
 }
 function Invoke-Control([string]$Name) {
   Write-Output "Installed UI: activate $Name"
-  # Wait-Control can match headings/status text. Actions must match a button,
-  # not a same-named non-interactive accessibility node.
   $condition = [System.Windows.Automation.AndCondition]::new(
     (Named-Condition $Name),
     [System.Windows.Automation.PropertyCondition]::new(
@@ -122,7 +120,6 @@ function Import-Fixture {
 function Playback-Seconds {
   $items = $script:window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
   # WebView2 exposes the React timer as adjacent current / duration text nodes.
-  # Read that observed structure rather than matching a fabricated merged label.
   for ($i = 1; $i -lt $items.Count - 1; $i++) {
     if ($items[$i].Current.Name.Trim() -eq '/' -and $items[$i-1].Current.Name -match '^00:(\d{2})$' -and $items[$i+1].Current.Name -match '^00:0[1-9]$') {
       return [int]$items[$i-1].Current.Name.Split(':')[1]
@@ -158,17 +155,36 @@ try {
   Wait-Control 'Video source' | Out-Null
   Wait-Control 'Recording folder' | Out-Null
   Save-Window 'capture-settings'
+  Invoke-Control 'Advanced settings'
+  Wait-Control 'Video bitrate (kbps)' | Out-Null
+  Save-Window 'advanced-settings'
+  Invoke-Control 'Advanced settings'
+  Invoke-Control 'Smooth quality'
+  Invoke-Control 'Library'
+  Wait-Control 'Keep your profile changes?' | Out-Null
+  Save-Window 'unsaved-profile-guard'
+  Invoke-Control 'Stay and edit'
+  Invoke-Control 'Discard changes'
+  Invoke-Control 'Compact quality'
+  Invoke-Control 'Save profile'
+  Wait-Control 'Saved on this computer' | Out-Null
   Invoke-Control 'Diagnostics'
   Wait-Control 'Consistent library backup' | Out-Null
   Save-Window 'diagnostics'
-  Write-Output 'Installed UI: library, native settings and diagnostics rendered'
+  Write-Output 'Installed UI: simplified settings, advanced disclosure, unsaved guard and native profile save passed'
   Invoke-Control 'Library'
   Import-Fixture
+  Invoke-Control 'Export options'
+  Wait-Control 'Export method' | Out-Null
+  Invoke-Control 'Export options'
+  Invoke-Control '15s around playhead'
   Verify-Playback
   Invoke-Control 'Queue export'
   Wait-Control 'Show clip' | Out-Null
+  Invoke-Control 'Filter exports: Completed'
+  Wait-Control 'Show clip' | Out-Null
   Save-Window 'completed-ui-export'
-  Write-Output 'Installed UI: real export completed'
+  Write-Output 'Installed UI: real export completed and remains accessible through the Completed filter'
   $second = Start-Process -FilePath $executablePath -PassThru
   try { if (-not $second.WaitForExit(15000)) { throw 'Second launch did not hand off to the existing instance' } } finally { $second.Dispose() }
   if (@(Get-Process -Name PLAYZ -ErrorAction SilentlyContinue).Count -ne 1) { throw 'Expected exactly one PLAYZ instance' }
@@ -178,8 +194,8 @@ try {
   Open-App
   Wait-Control ('Open ' + [IO.Path]::GetFileNameWithoutExtension($mediaPath)) | Out-Null
   Save-Window 'persisted-library'
-  # Exercise actual Tauri commands and durable visibility, not injected data.
   Invoke-Control ('Open ' + [IO.Path]::GetFileNameWithoutExtension($mediaPath))
+  Invoke-Control 'Recording tools'
   Invoke-Control 'Remove entry'
   Wait-Control 'Remove library entry?' | Out-Null
   Invoke-Control 'Remove entry only'
@@ -205,10 +221,9 @@ try {
   Invoke-Control 'Export queue'
   Wait-Control 'Show clip' | Out-Null
   Write-Output 'Installed UI: removal survived restart; restored recording and dependent export remain accessible'
-
   Invoke-Control 'Quit safely'
   if (-not $script:appProcess.WaitForExit(20000)) { throw 'Restarted application did not quit' }
-  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; diagnostics_view = $true; native_picker_import = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; removed_entry_persisted_after_restart = $true; removed_entry_restored_from_library = $true; dependent_export_preserved = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
+  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; advanced_settings_disclosure = $true; unsaved_profile_guard = $true; preset_saved_natively = $true; diagnostics_view = $true; native_picker_import = $true; quick_clip_selection = $true; export_options_disclosure = $true; completed_export_filter = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; removed_entry_persisted_after_restart = $true; removed_entry_restored_from_library = $true; dependent_export_preserved = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
 } catch {
   if ($null -ne $script:window) {
     try {
