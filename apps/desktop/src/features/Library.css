@@ -1,0 +1,6 @@
+/* Removed entries are read-only until explicitly restored. */
+.library-collections{margin-bottom:16px}
+.removed-row{grid-template-columns:minmax(160px,1fr) 88px 85px 135px;gap:8px}
+.removed-heading{grid-template-columns:minmax(160px,1fr) 88px 85px 135px;gap:8px}
+.removed-row>.button{justify-self:end}
+@media(max-width:1100px){.removed-row,.removed-heading{grid-template-columns:minmax(140px,1fr) 75px 110px}.removed-row>.button{padding:8px 10px}}

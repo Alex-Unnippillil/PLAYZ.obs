@@ -15,7 +15,7 @@ A short test recording and export are essential before a longer session. **Devic
 ## Implemented source workflows
 
 - Explicit window/game capture through libobs, H.264/AAC SDR profiles, optional microphone, serialized native supervision and disk-reserve checks.
-- Searchable local SQLite library, title/tags/notes/favorites, resume position, bookmarks, import, recovery, relink and reversible entry removal. Removing an entry does not delete media.
+- Searchable local SQLite library, title/tags/notes/favorites, resume position, bookmarks, import, recovery, relink and reversible entry removal. Removing an entry does not delete media. **Library > Removed** provides searchable, persistent restoration after a restart.
 - Offline MP4 playback, trim preview, accurate re-encoding and explicitly keyframe-aligned fast export, persistent job queue, cancellation, and pause/restart of heavy export work during recording.
 - Dark/light/system interface, keyboard focus, global recording/bookmark shortcuts, single-instance behavior, tray close and safe explicit quit.
 - Pinned source/dependency manifests, generated Rust/TypeScript contracts, C++/Rust/frontend/media tests and an unsigned per-user NSIS build pipeline with full offline WebView2 installation mode.

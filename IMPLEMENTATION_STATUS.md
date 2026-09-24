@@ -6,14 +6,16 @@ The exact tested installer, hashes, build source and independently passing insta
 
 ## Next-version development
 
-Receipt-backed export recovery and stop-transaction failure cleanup are implemented in the next source increment. See [export recovery behaviour and verification](docs/EXPORT_RECOVERY.md). The historical installer below predates these code changes; fresh build/test evidence is required for the increment.
+The receipt-backed export recovery increment was merged in PR #1 as `f4a6b5c87dee9d188077ea55fff98aa6ac8d035a`; its tested tree is `8d7f35cdeb90461ccb8ffa5535bf89641ad1b146`. Exact package evidence is recorded on that PR, separately from the historical installer below.
+
+The current increment adds **Library > Removed**: searchable/paginated removed entries, explicit restoration after restart, literal search text, and atomic removal guards that reject active/missing entries. See [removed-recording behavior and verification](docs/REMOVED_RECORDINGS.md). This restores catalog visibility, not deleted video files or an entire database backup. No schema or dependency change is required. New source, media and installed-workflow tests must pass on this increment; historical test results are not evidence for the changed UI.
 
 ## Evidence
 
 | Check | Exact source / Actions run | Result and scope |
 |---|---|---|
 | Native host and protocol | `ee134a144ff348467a05efccaa7745931a4d695a` / `35911118637` | Original C++ adapter compiled against pinned OBS; 1,784 verified C exports; CTest passed. |
-| Frontend and dependency audit | `09f528e540f5b86df9db204517b86aa64be23529` / `35912714444` | Frozen install, strict TypeScript, 30 tests in four files, production Vite build and audit passed. Application UI source remains unchanged. |
+| Frontend and dependency audit | `09f528e540f5b86df9db204517b86aa64be23529` / `35912714444` | Frozen install, strict TypeScript, 30 tests in four files, production Vite build and audit passed. Historical baseline; the Removed collection increment changes Library UI source. |
 | Hardened core | `e5a95359195058e05e6dff88cb43f45c52a0c1ac` / `35915948438` | Windows and Ubuntu passed rustfmt, 23 unit/property tests, two export-safety tests, DTO drift and export-parser checks. |
 | Actual FFmpeg media | `553672a973f7d39131707045f75db4fcecaeb608` / `35914868736` | Real fixture remux/accurate trim, decoded frame bounds, generated audio signal, cancellation and unchanged original hash passed. |
 | Actual selected-window capture | `f4f42448f2e597f4a8c45178337d38cb1e2222b6` / `35914615521` | Rust/libobs capture, finalize, MP4 asset, accurate export and reopened catalog/bookmark passed. 7,733 ms, x264, 720p30, Hyper-V Video. Audio disabled. |
@@ -37,7 +39,7 @@ Hosted environment is Windows Server 2022, not a clean Windows 11 consumer machi
 | Export | `media.rs`, Review and Export Queue | Actual UI export and decoded accurate-trim tests passed. Fast mode is keyframe-aligned, not exact. Persistent queue/cancel/retry; heavy work pauses/restarts during capture. |
 | Output ownership/recovery | `media.rs`, `media_receipt.rs`, `tests/export_safety.rs`, `tests/media_pipeline.rs` | Receipt-backed SHA-256 reconciliation of published or verified temporary clips. Unknown/changed output fails closed; cancellation/pause checks during hashing. New tests require exact-commit execution evidence; see `docs/EXPORT_RECOVERY.md`. |
 | Editing/bookmarks | Library commands and UI | Titles, tags, notes, favorites, resume and bookmark CRUD/import. Live bookmark survived catalog reopen in capture test. |
-| Relink/removal | `paths::registered_relink`, core | Relink requires complete original UUID folder and matching manifest. Unrelated videos use Import. Removal hides entry while preserving media/exports. |
+| Relink/removal | `paths::registered_relink`, core | Relink requires complete original UUID folder and matching manifest. Unrelated videos use Import. Removal hides entry while preserving media/exports; Library > Removed can restore it after restart. New tests cover visibility, metadata and media preservation. |
 | Shortcuts/tray/quit/instance | Tauri host | Maintained plugins. Installed single-instance/idle-quit/restart passed; active-capture hotkey/tray/fault scenarios still require acceptance. |
 | Native/installed fixtures | `tools/capture-fixture`, `scripts/test-installed*`, integration tests | Real application/core/media paths, no shipped test server or mock. Distinct fixture and installed-package evidence. |
 | League and synchronization | `league.rs` | Preparatory pure mapping/candidate tests only. No live client, TLS trust bundle, automation or durable backfill. Manual live timing uses encoded frame count, not calibrated exact PTS. |

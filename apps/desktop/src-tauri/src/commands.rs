@@ -32,6 +32,19 @@ pub async fn list_recordings(
         .map_err(message)
 }
 #[tauri::command]
+pub async fn list_removed_recordings(
+    core: App<'_>,
+    query: String,
+    offset: u32,
+    limit: u32,
+    favorites: bool,
+) -> Reply<LibraryPage> {
+    core.library
+        .list_removed(query, offset, limit, favorites)
+        .await
+        .map_err(message)
+}
+#[tauri::command]
 pub async fn get_recording(core: App<'_>, id: String) -> Reply<Recording> {
     playz_core::paths::validate_id(&id).map_err(message)?;
     Ok(core.library.get(id).await.map_err(message)?.view)
@@ -111,6 +124,7 @@ pub async fn edit_recording(core: App<'_>, id: String, details: Details) -> Repl
 }
 #[tauri::command]
 pub async fn remove_recording(core: App<'_>, id: String) -> Reply<()> {
+    playz_core::paths::validate_id(&id).map_err(message)?;
     if core.snapshot().recording_id.as_deref() == Some(&id) && core.is_busy() {
         return Err("Stop this recording first".into());
     }
@@ -118,6 +132,7 @@ pub async fn remove_recording(core: App<'_>, id: String) -> Reply<()> {
 }
 #[tauri::command]
 pub async fn restore_recording(core: App<'_>, id: String) -> Reply<()> {
+    playz_core::paths::validate_id(&id).map_err(message)?;
     core.library.restore_entry(id).await.map_err(message)
 }
 #[tauri::command]

@@ -149,9 +149,37 @@ try {
   Open-App
   Wait-Control ('Open ' + [IO.Path]::GetFileNameWithoutExtension($mediaPath)) | Out-Null
   Save-Window 'persisted-library'
+  # Exercise actual Tauri commands and durable visibility, not injected data.
+  Invoke-Control ('Open ' + [IO.Path]::GetFileNameWithoutExtension($mediaPath))
+  Invoke-Control 'Remove entry'
+  Wait-Control 'Remove library entry?' | Out-Null
+  Invoke-Control 'Remove entry only'
+  Wait-Control 'Undo removal' | Out-Null
+  Invoke-Control 'Library'
+  Wait-Control 'Your next session starts here' | Out-Null
+  if ($null -ne (Find-Control 'Open fixture')) { throw 'Removed recording remains in Active' }
+  Invoke-Control 'Show removed recordings'
+  Wait-Control 'Restore fixture' | Out-Null
+  Save-Window 'removed-recording'
+  Invoke-Control 'Quit safely'
+  if (-not $script:appProcess.WaitForExit(20000)) { throw 'Quit with hidden recording did not finish' }
+  $script:appProcess.Dispose(); $script:appProcess = $null
+  Open-App
+  Wait-Control 'Your next session starts here' | Out-Null
+  if ($null -ne (Find-Control 'Open fixture')) { throw 'Restart resurrected a removed recording' }
+  Invoke-Control 'Show removed recordings'
+  Invoke-Control 'Restore fixture'
+  Wait-Control 'No removed recordings' | Out-Null
+  Invoke-Control 'Show active recordings'
+  Wait-Control 'Open fixture' | Out-Null
+  Save-Window 'restored-recording'
+  Invoke-Control 'Export queue'
+  Wait-Control 'Show clip' | Out-Null
+  Write-Output 'Installed UI: removal survived restart; restored recording and dependent export remain accessible'
+
   Invoke-Control 'Quit safely'
   if (-not $script:appProcess.WaitForExit(20000)) { throw 'Restarted application did not quit' }
-  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; diagnostics_view = $true; native_picker_import = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
+  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; diagnostics_view = $true; native_picker_import = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; removed_entry_persisted_after_restart = $true; removed_entry_restored_from_library = $true; dependent_export_preserved = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
 } catch {
   if ($null -ne $script:window) {
     try {
