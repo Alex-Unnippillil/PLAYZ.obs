@@ -2,7 +2,7 @@ name: UI interaction and accessibility
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, work/ui-library-docs]
   workflow_dispatch:
 permissions:
   contents: read
@@ -45,9 +45,9 @@ jobs:
             artifacts/ui-results/
           retention-days: 14
   gallery-blobs:
-    # Documentation-only, owner-controlled manual run. Upload immutable image
+    # Documentation-only, owner-controlled branch push. Upload immutable image
     # blobs for a subsequent reviewed commit; never update refs from CI.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/work/ui-library-docs' && github.repository == 'Alex-Unnippillil/PLAYZ.obs'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/work/ui-library-docs' && github.repository == 'Alex-Unnippillil/PLAYZ.obs'
     needs: renderer
     runs-on: ubuntu-24.04
     timeout-minutes: 5

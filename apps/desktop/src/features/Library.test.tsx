@@ -178,12 +178,12 @@ it('preserves unsupported preference versions until an explicit reset', async ()
   expect(localStorage.getItem('playz.library.preferences.v1')).toBe(raw);
   fireEvent.click(screen.getByRole('button', { name: 'Manage saved library views' }));
   fireEvent.click(screen.getByRole('button', { name: 'Reset view preferences' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Reset preferences', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reset preferences' }));
   expect(localStorage.getItem('playz.library.preferences.v1')).toBeNull();
   expect(screen.getByRole('button', { name: 'Comfortable recording density' })).toHaveAttribute('aria-pressed', 'true');
 });
 it('reports storage failures without claiming the view was saved locally', async () => {
-  mount(); vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded'); });
+  mount(); await screen.findByRole('button', { name: 'Open Session one' }); vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded'); });
   fireEvent.click(screen.getByRole('button', { name: 'Save current library view' }));
   fireEvent.change(screen.getByLabelText('View name'), { target: { value: 'Session only' } });
   fireEvent.click(screen.getByRole('dialog').querySelector('button[type=submit]')!);

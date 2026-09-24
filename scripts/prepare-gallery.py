@@ -43,9 +43,9 @@ def main() -> None:
         shutil.copyfile(paths[0], args.output / target_name)
         item = {'path': f'docs/assets/{target_name}', 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
         if args.upload_blobs:
-            # Narrow allowlist: manual run on this owner-controlled branch only.
-            if os.environ.get('GITHUB_EVENT_NAME') != 'workflow_dispatch' or os.environ.get('GITHUB_REF') != 'refs/heads/work/ui-library-docs' or os.environ.get('GITHUB_REPOSITORY') != 'Alex-Unnippillil/PLAYZ.obs':
-                raise RuntimeError('Blob upload is restricted to the manual documentation branch')
+            # Narrow allowlist: branch push on this owner-controlled branch only.
+            if os.environ.get('GITHUB_EVENT_NAME') != 'push' or os.environ.get('GITHUB_REF') != 'refs/heads/work/ui-library-docs' or os.environ.get('GITHUB_REPOSITORY') != 'Alex-Unnippillil/PLAYZ.obs':
+                raise RuntimeError('Blob upload is restricted to the owner-controlled documentation branch')
             payload = json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode()
             req = urllib.request.Request('https://api.github.com/repos/Alex-Unnippillil/PLAYZ.obs/git/blobs', data=payload,
                 headers={'Authorization': f'Bearer {os.environ["GH_TOKEN"]}', 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
