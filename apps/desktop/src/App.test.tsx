@@ -20,7 +20,8 @@ beforeEach(() => {
 afterEach(() => clients.splice(0).forEach(client => client.clear()));
 it('uses setup rather than an unexplained disabled Record button without a target', async () => {
   vi.mocked(api.state).mockResolvedValue({ ...snapshotFixture, settings: { ...settingsFixture, target_id: '', target_label: '' } });
-  mount(); fireEvent.click(await screen.findByRole('button', { name: 'Set up recording' }));
+  mount(); const setup = await screen.findByRole('button', { name: 'Set up recording' });
+  await waitFor(() => expect(setup).toBeEnabled()); fireEvent.click(setup);
   expect(await screen.findByRole('heading', { name: 'Set up your recording' })).toBeInTheDocument();
   expect(api.start).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: 'Match review' })).toBeNull();
@@ -29,11 +30,11 @@ it('guards navigation from a dirty profile, preserves on Stay and discards only 
   mount(); await screen.findByRole('button', { name: 'Record' });
   fireEvent.click(screen.getByRole('button', { name: 'Capture settings' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Smooth quality' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Library', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Library' }));
   expect(await screen.findByRole('dialog', { name: 'Keep your profile changes?' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Stay and edit' }));
   expect(screen.getByRole('button', { name: 'Smooth quality' })).toHaveAttribute('aria-pressed', 'true');
-  fireEvent.click(screen.getByRole('button', { name: 'Library', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Library' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Discard and continue' }));
   expect(await screen.findByRole('heading', { name: 'Your recordings' })).toBeInTheDocument();
   expect(api.settings).not.toHaveBeenCalled();

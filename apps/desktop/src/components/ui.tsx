@@ -15,10 +15,12 @@ export function Empty({ title, children }: { title: string; children: ReactNode 
 }
 export function Modal({ open, onClose, title, description, children }: { open: boolean; onClose: () => void; title: string; description: string; children: ReactNode }) {
   const previousFocus = useRef<HTMLElement | null>(null);
-  return <Dialog.Root open={open} onOpenChange={value => { if (!value) onClose(); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content" onOpenAutoFocus={() => {
-    // These controlled dialogs can also open from keyboard shortcuts, without
-    // a Dialog.Trigger. Preserve their real origin for Escape/cancel.
+  return <Dialog.Root open={open} onOpenChange={value => { if (!value) onClose(); }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay"/><Dialog.Content className="dialog-content" onOpenAutoFocus={event => {
+    // Controlled dialogs may open without a Dialog.Trigger. Capture their real
+    // origin before applying any explicitly requested initial focus.
     previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const first = event.target instanceof HTMLElement ? event.target.querySelector<HTMLElement>('[data-initial-focus]') : null;
+    if (first) { event.preventDefault(); first.focus(); }
   }} onCloseAutoFocus={event => {
     if (previousFocus.current?.isConnected) { event.preventDefault(); previousFocus.current.focus(); }
   }}><div className="row between"><Dialog.Title>{title}</Dialog.Title><Dialog.Close asChild><Button variant="ghost" aria-label="Close dialog"><X size={18} aria-hidden="true"/></Button></Dialog.Close></div><Dialog.Description className="muted">{description}</Dialog.Description>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
