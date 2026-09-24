@@ -235,16 +235,61 @@ impl Library {
         limit: u32,
         favorites: bool,
     ) -> Result<LibraryPage> {
+        self.list_collection(query, offset, limit, favorites, false)
+            .await
+    }
+    pub async fn list_removed(
+        &self,
+        query: String,
+        offset: u32,
+        limit: u32,
+        favorites: bool,
+    ) -> Result<LibraryPage> {
+        self.list_collection(query, offset, limit, favorites, true)
+            .await
+    }
+    async fn list_collection(
+        &self,
+        query: String,
+        offset: u32,
+        limit: u32,
+        favorites: bool,
+        removed: bool,
+    ) -> Result<LibraryPage> {
         if query.len() > 200 || limit == 0 || limit > 200 {
             return Err("Library query exceeds its limits".into());
         }
         self.call(move |c| {
-            let filter = "removed=0 AND (?1='' OR title LIKE '%'||?1||'%' OR notes LIKE '%'||?1||'%' OR tags_json LIKE '%'||?1||'%') AND (?2=0 OR favorite=1)";
-            let total: u32 = c.query_row(&format!("SELECT count(*) FROM recordings WHERE {filter}"), params![query, favorites], |r| r.get(0))?;
-            let mut q = c.prepare(&format!("SELECT {RECORD_COLUMNS} FROM recordings WHERE {filter} ORDER BY created_at DESC,id DESC LIMIT ?3 OFFSET ?4"))?;
-            let rows = q.query_map(params![query, favorites, limit, offset], record_row)?.collect::<rusqlite::Result<Vec<_>>>()?;
-            Ok(LibraryPage { items: rows.into_iter().map(|s| s.view).collect(), total })
-        }).await
+            // Search text is literal, not a user-supplied LIKE pattern.
+            let pattern = format!(
+                "%{}%",
+                query
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_")
+            );
+            let filter = "removed=?5 AND (title LIKE ?1 ESCAPE '\\' OR notes LIKE ?1 ESCAPE '\\' OR tags_json LIKE ?1 ESCAPE '\\') AND (?2=0 OR favorite=1)";
+            // Keep count and page in one read snapshot, including if another
+            // connection commits a visibility change while this query runs.
+            let tx = c.transaction()?;
+            let total: u32 = tx.query_row(
+                &format!("SELECT count(*) FROM recordings WHERE {filter}"),
+                params![pattern, favorites, limit, offset, removed],
+                |r| r.get(0),
+            )?;
+            let items = {
+                let mut q = tx.prepare(&format!(
+                    "SELECT {RECORD_COLUMNS} FROM recordings WHERE {filter} ORDER BY created_at DESC,id DESC LIMIT ?3 OFFSET ?4"
+                ))?;
+                let rows = q
+                    .query_map(params![pattern, favorites, limit, offset, removed], record_row)?
+                    .collect::<rusqlite::Result<Vec<_>>>()?;
+                rows.into_iter().map(|s| s.view).collect()
+            };
+            tx.commit()?;
+            Ok(LibraryPage { items, total })
+        })
+        .await
     }
     pub async fn lifecycle(
         &self,
@@ -299,11 +344,30 @@ impl Library {
         .await
     }
     pub async fn remove_entry(&self, id: String) -> Result<()> {
-        self.call(move |c| { c.execute("UPDATE recordings SET removed=1 WHERE id=?1 AND phase NOT IN ('preparing','recording','finalizing')", [id])?; Ok(()) }).await
+        self.call(move |c| {
+            // One conditional statement avoids a check-then-update race with
+            // lifecycle transitions. Repeated removal of a safe entry is OK.
+            let changed = c.execute(
+                "UPDATE recordings SET removed=1 WHERE id=?1 AND phase NOT IN ('preparing','recording','finalizing')",
+                [id],
+            )?;
+            if changed != 1 {
+                return Err(
+                    "Recording not found or still active. Stop and finalize it before removal."
+                        .into(),
+                );
+            }
+            Ok(())
+        })
+        .await
     }
     pub async fn restore_entry(&self, id: String) -> Result<()> {
         self.call(move |c| {
-            c.execute("UPDATE recordings SET removed=0 WHERE id=?1", [id])?;
+            // Restore visibility only. Do not rewrite lifecycle, media paths,
+            // user edits, bookmarks, resume position, or dependent export jobs.
+            if c.execute("UPDATE recordings SET removed=0 WHERE id=?1", [id])? != 1 {
+                return Err("Recording not found; no entry was restored".into());
+            }
             Ok(())
         })
         .await

@@ -12,6 +12,7 @@ export const api = {
   state: () => call<Snapshot>('app_state'),
   devices: () => call<Capabilities>('discover_devices'),
   list: (query: string, offset: number, favorites: boolean) => call<LibraryPage>('list_recordings', { query, offset, limit: 50, favorites }),
+  listRemoved: (query: string, offset: number, favorites: boolean) => call<LibraryPage>('list_removed_recordings', { query, offset, limit: 50, favorites }),
   recording: (id: string) => call<Recording>('get_recording', { id }),
   start: (requestId: string) => call<Snapshot>('start_recording', { requestId }),
   stop: () => call<Snapshot>('stop_recording'),

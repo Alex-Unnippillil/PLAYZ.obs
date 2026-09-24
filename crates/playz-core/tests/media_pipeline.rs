@@ -243,3 +243,98 @@ async fn catalog_restart_reconciles_a_published_export() {
         "Persisted running job reconciled to queued then completed after reopening the real catalog; clip and master hashes unchanged."
     );
 }
+
+#[tokio::test]
+#[ignore = "Run scripts/test-media.ps1 with the verified native runtime"]
+async fn removed_recording_restores_after_core_restart_without_changing_media() {
+    use playz_core::{Core, contracts::Bookmark};
+    use std::time::Duration;
+
+    let runtime = PathBuf::from(std::env::var("PLAYZ_TEST_RUNTIME").unwrap());
+    let fixture = PathBuf::from(std::env::var("PLAYZ_TEST_MEDIA").unwrap()).join("fixture.mkv");
+    let directory = tempfile::tempdir().unwrap();
+    let data = directory.path().join("data");
+    let videos = directory.path().join("videos");
+    let core = Core::open(runtime.clone(), data.clone(), videos.clone())
+        .await
+        .unwrap();
+    let recording = core.import_file(fixture).await.unwrap();
+    let id = recording.id.clone();
+    let master = core.master_path(id.clone()).await.unwrap();
+    let playback = core.playback_path(id.clone()).await.unwrap();
+    let before_master = digest(&master);
+    let before_playback = digest(&playback);
+    core.library.resume(id.clone(), 1500.0).await.unwrap();
+    let bookmark = core
+        .save_bookmark(Bookmark {
+            id: uuid::Uuid::new_v4().to_string(),
+            recording_id: id.clone(),
+            position_ms: 1000.0,
+            label: "Preserved highlight".into(),
+            note: "Restore without losing metadata".into(),
+        })
+        .await
+        .unwrap();
+    let job = core
+        .queue_export(ExportRequest {
+            recording_id: id.clone(),
+            start_ms: 1000.0,
+            end_ms: 3000.0,
+            mode: ExportMode::Accurate,
+            name: "preserved".into(),
+        })
+        .await
+        .unwrap();
+    core.spawn_workers();
+    tokio::time::timeout(Duration::from_secs(45), async {
+        loop {
+            let state = core.library.job(job.id.clone()).await.unwrap();
+            assert_ne!(state.view.state, "failed", "{:?}", state.view.error);
+            if state.view.state == "completed" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let output = core.export_path(job.id.clone()).await.unwrap();
+    let before_export = digest(&output);
+    core.library.remove_entry(id.clone()).await.unwrap();
+    core.shutdown().await.unwrap();
+    drop(core);
+    let reopened = Core::open(runtime, data, videos).await.unwrap();
+    let active = reopened
+        .library
+        .list("".into(), 0, 50, false)
+        .await
+        .unwrap();
+    assert_eq!(active.total, 0);
+    let removed = reopened
+        .library
+        .list_removed("fixture".into(), 0, 50, false)
+        .await
+        .unwrap();
+    assert_eq!(removed.total, 1);
+    assert_eq!(removed.items[0].id, id);
+    reopened.library.restore_entry(id.clone()).await.unwrap();
+    let restored = reopened.library.get(id.clone()).await.unwrap();
+    assert_eq!(restored.view.resume_ms, 1500.0);
+    assert_eq!(restored.view.phase, playz_core::contracts::Phase::Ready);
+    assert_eq!(
+        reopened.library.bookmarks(id.clone()).await.unwrap()[0].id,
+        bookmark.id
+    );
+    let asset = reopened.playback_path(id).await.unwrap();
+    let probe = reopened.media.probe(&asset).await.unwrap();
+    assert!(probe.compatible());
+    assert!(probe.duration_ms > 3000.0);
+    assert_eq!(reopened.export_path(job.id).await.unwrap(), output);
+    reopened.shutdown().await.unwrap();
+    assert_eq!(digest(&master), before_master);
+    assert_eq!(digest(&playback), before_playback);
+    assert_eq!(digest(&output), before_export);
+    println!(
+        "Removed entry survived Core restart and restored with bookmark/resume/export intact; all three media hashes unchanged."
+    );
+}
