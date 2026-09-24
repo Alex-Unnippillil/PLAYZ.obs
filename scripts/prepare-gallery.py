@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Collect successful renderer screenshots; optionally upload immutable Git blobs.
+"""Collect successful renderer screenshots and identity metadata.
 
-Run after the UI suite. Never mutates refs, replaces screenshots from failed tests,
-prints tokens, or writes a recording. Requires GH_TOKEN only for --upload-blobs.
+Read-only CI helper: no network, credentials, repository writes or media changes.
+Images can be reviewed and committed through the ordinary contributor workflow.
 """
 from __future__ import annotations
 import argparse
-import base64
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
-import urllib.request
 
 GALLERY = {
     'library-dark-1440.png': 'library-dark.png',
@@ -27,7 +24,6 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--results', type=Path, default=Path('artifacts/ui-results'))
     parser.add_argument('--output', type=Path, default=Path('artifacts/gallery'))
-    parser.add_argument('--upload-blobs', action='store_true')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
@@ -42,18 +38,7 @@ def main() -> None:
             raise RuntimeError(f'Not a PNG: {source_name}')
         shutil.copyfile(paths[0], args.output / target_name)
         item = {'path': f'docs/assets/{target_name}', 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}
-        if args.upload_blobs:
-            # Narrow allowlist: branch push on this owner-controlled branch only.
-            if os.environ.get('GITHUB_EVENT_NAME') != 'push' or os.environ.get('GITHUB_REF') != 'refs/heads/work/ui-library-docs' or os.environ.get('GITHUB_REPOSITORY') != 'Alex-Unnippillil/PLAYZ.obs':
-                raise RuntimeError('Blob upload is restricted to the owner-controlled documentation branch')
-            payload = json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode()
-            req = urllib.request.Request('https://api.github.com/repos/Alex-Unnippillil/PLAYZ.obs/git/blobs', data=payload,
-                headers={'Authorization': f'Bearer {os.environ["GH_TOKEN"]}', 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'}, method='POST')
-            with urllib.request.urlopen(req, timeout=60) as response:
-                item['git_blob_sha'] = json.load(response)['sha']
-            expected = hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
-            if item['git_blob_sha'] != expected:
-                raise RuntimeError('Uploaded Git blob identity mismatch')
+        item['git_blob_sha'] = hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
         manifest['images'].append(item)
     (args.output / 'gallery.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(manifest, indent=2))

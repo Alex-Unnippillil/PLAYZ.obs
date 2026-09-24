@@ -12,6 +12,8 @@ PR #2 added **Library > Removed** and was merged as `fbcfc45622d50d547800ff46944
 
 PR #3 adds the [simplified local UI](docs/UI_EXPERIENCE.md): quality presets with explicit save, protected in-app settings navigation, searchable quick navigation, player-local shortcuts, bounded 15/30-second clip selection, advanced/recovery disclosures, export filters and responsive dark/light layouts. The native production core, dependencies, contracts and permissions are unchanged. Tests distinguish renderer-only fixtures from the newly packaged Windows application's real commands. The exact source, results, screenshots and installer provenance belong to [PR #3 and its checks](https://github.com/Alex-Unnippillil/PLAYZ.obs/pull/3); implementation alone does not establish passing execution. Every relevant final-commit gate must pass before merge.
 
+PR #4 adds [saved views and the recording overview](docs/WORKSPACE_GUIDE.md): up to eight explicit local view shortcuts, comfortable/compact density, guarded search focus, persisted playhead hints and a two-copy storage planning estimate with unavailable/stale-reading warnings. No native recording, schema, dependency or permission change. The illustrated README records pinned stack details, renderer-fixture image provenance and architecture/export-flow charts. Exact completed check results and the new package identity belong to [PR #4](https://github.com/Alex-Unnippillil/PLAYZ.obs/pull/4), not the historical installer below. The extended installed workflow checks view/density persistence on a real restart.
+
 ## Historical baseline evidence
 
 | Check | Exact source / Actions run | Result and scope |

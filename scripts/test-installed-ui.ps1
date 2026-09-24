@@ -148,6 +148,7 @@ function Verify-Playback {
   } while ([DateTime]::UtcNow -lt $deadline)
   throw 'The packaged HTML video playhead did not advance on the real MP4 playback asset'
 }
+. "$PSScriptRoot/test-workspace-installed.ps1"
 try {
   Open-App
   Save-Window 'library'
@@ -185,6 +186,7 @@ try {
   Wait-Control 'Show clip' | Out-Null
   Save-Window 'completed-ui-export'
   Write-Output 'Installed UI: real export completed and remains accessible through the Completed filter'
+  Save-WorkspaceView
   $second = Start-Process -FilePath $executablePath -PassThru
   try { if (-not $second.WaitForExit(15000)) { throw 'Second launch did not hand off to the existing instance' } } finally { $second.Dispose() }
   if (@(Get-Process -Name PLAYZ -ErrorAction SilentlyContinue).Count -ne 1) { throw 'Expected exactly one PLAYZ instance' }
@@ -194,6 +196,7 @@ try {
   Open-App
   Wait-Control ('Open ' + [IO.Path]::GetFileNameWithoutExtension($mediaPath)) | Out-Null
   Save-Window 'persisted-library'
+  Assert-WorkspaceView
   Invoke-Control ('Open ' + [IO.Path]::GetFileNameWithoutExtension($mediaPath))
   Invoke-Control 'Recording tools'
   Invoke-Control 'Remove entry'
@@ -223,7 +226,7 @@ try {
   Write-Output 'Installed UI: removal survived restart; restored recording and dependent export remain accessible'
   Invoke-Control 'Quit safely'
   if (-not $script:appProcess.WaitForExit(20000)) { throw 'Restarted application did not quit' }
-  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; advanced_settings_disclosure = $true; unsaved_profile_guard = $true; preset_saved_natively = $true; diagnostics_view = $true; native_picker_import = $true; quick_clip_selection = $true; export_options_disclosure = $true; completed_export_filter = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; removed_entry_persisted_after_restart = $true; removed_entry_restored_from_library = $true; dependent_export_preserved = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
+  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; advanced_settings_disclosure = $true; unsaved_profile_guard = $true; preset_saved_natively = $true; diagnostics_view = $true; native_picker_import = $true; quick_clip_selection = $true; export_options_disclosure = $true; completed_export_filter = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; removed_entry_persisted_after_restart = $true; removed_entry_restored_from_library = $true; dependent_export_preserved = $true; saved_view_persisted_after_restart = $true; density_persisted_after_restart = $true; saved_view_applied_to_native_library = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
 } catch {
   if ($null -ne $script:window) {
     try {
