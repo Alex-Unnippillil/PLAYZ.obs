@@ -33,11 +33,42 @@ jobs:
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=960x540:rate=30 -t 4 -an -c:v libx264 -pix_fmt yuv420p -movflags +faststart apps/desktop/dist/fixture.mp4
       - name: Browser interaction, reflow and axe checks
         run: pnpm --dir apps/desktop exec playwright test --config playwright.ui.config.ts
+      - name: Collect successful README screenshots
+        run: python scripts/prepare-gallery.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: ui-evidence-${{ github.sha }}
           path: |
+            artifacts/gallery/
             artifacts/ui-report/
             artifacts/ui-results/
+          retention-days: 14
+  gallery-blobs:
+    # Documentation-only, owner-controlled manual run. Upload immutable image
+    # blobs for a subsequent reviewed commit; never update refs from CI.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/work/ui-library-docs' && github.repository == 'Alex-Unnippillil/PLAYZ.obs'
+    needs: renderer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ui-evidence-${{ github.sha }}
+          path: artifacts
+      - name: Upload verified documentation image blobs without modifying a branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/prepare-gallery.py --upload-blobs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gallery-blobs-${{ github.sha }}
+          path: artifacts/gallery/gallery.json
+          if-no-files-found: error
           retention-days: 14

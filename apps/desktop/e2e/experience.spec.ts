@@ -40,7 +40,7 @@ async function seed(page: Page, theme = 'dark') {
       },
     };
   }, { settings: { ...settingsFixture, theme }, snapshot: snapshotFixture, devices: devicesFixture,
-    recordings: [recordingFixture, { ...recordingFixture, id: 'second-fixture', title: 'Evening practice · final round', favorite: true, tags: ['favorite', 'review'] }],
+    recordings: [recordingFixture, { ...recordingFixture, id: 'second-fixture', title: 'Evening practice · final round', favorite: true, resume_ms: 45000, tags: ['favorite', 'review'] }],
     jobs: [exportFixture('running', 'round-highlight'), exportFixture('completed', 'practice-clip'), exportFixture('failed', 'retry-clip')],
   });
 }
@@ -124,4 +124,48 @@ test('production browser page does not contain an enabled mock recorder', async 
   await expect(page.getByText(/A browser preview cannot record or access your library/).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Set up recording' })).toBeDisabled();
   expect(await page.evaluate(() => (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__)).toBeUndefined();
+});
+
+test('saved views, density and search shortcut survive a reload', async ({ page }, testInfo) => {
+  await seed(page); await page.goto('/');
+  await page.getByRole('button', { name: 'Compact recording density' }).click();
+  await page.getByLabel('Search recordings').fill('practice');
+  await page.getByRole('button', { name: 'Favorites', exact: true }).click();
+  await page.getByRole('button', { name: 'Save current library view' }).click();
+  const save = page.getByRole('dialog', { name: 'Save this library view' });
+  await save.getByLabel('View name').fill('Practice favorites'); await accessible(page);
+  await save.getByRole('button', { name: 'Save view', exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Compact recording density' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Apply saved view: Practice favorites' }).click();
+  await expect(page.getByRole('button', { name: 'Open Practice session', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open Evening practice · final round', exact: true })).toBeVisible();
+  await page.getByRole('heading', { name: 'Your recordings' }).click(); await page.keyboard.press('/');
+  await expect(page.getByLabel('Search recordings')).toBeFocused();
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await page.getByRole('button', { name: 'Comfortable recording density' }).click();
+  await page.screenshot({ path: testInfo.outputPath('library-saved-views.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Manage saved library views' }).click();
+  await page.getByRole('button', { name: 'Remove saved view: Practice favorites' }).click();
+  await expect(page.getByText('0 of 8 views saved')).toBeFocused();
+  await page.keyboard.press('Escape'); await page.reload();
+  await expect(page.getByRole('button', { name: 'Apply saved view: Practice favorites' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open Practice session', exact: true })).toBeVisible();
+});
+test('storage overview is an estimate and does not change capture settings', async ({ page }, testInfo) => {
+  await seed(page); await page.goto('/');
+  await expect(page.getByText('No audio selected')).toBeVisible();
+  await page.getByRole('button', { name: 'How this estimate works' }).click();
+  await expect(page.getByText(/this is not a guaranteed session length/)).toBeVisible();
+  await accessible(page); await page.screenshot({ path: testInfo.outputPath('capture-budget.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Edit capture profile' }).click();
+  await expect(page.getByRole('button', { name: 'Balanced quality' })).toHaveAttribute('aria-pressed', 'true');
+});
+test('compact library reflows at 390px and handles long saved view names', async ({ page }) => {
+  await seed(page); await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/');
+  await page.getByRole('button', { name: 'Save current library view' }).click();
+  await page.getByLabel('View name').fill('A'.repeat(40));
+  await page.getByRole('dialog').getByRole('button', { name: 'Save view', exact: true }).click();
+  await page.getByRole('button', { name: 'Compact recording density' }).click();
+  await noHorizontalOverflow(page); await accessible(page);
 });
