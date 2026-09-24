@@ -28,6 +28,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [settingsPending, setSettingsPending] = useState(false);
+  const [profileRevision, setProfileRevision] = useState(0);
   const [destination, setDestination] = useState<Destination | null>(null);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickSearch, setQuickSearch] = useState('');
@@ -73,6 +74,15 @@ export default function App() {
     if (view === 'settings' && settingsDirty && ('quit' in next || next.view !== 'settings')) setDestination(next);
     else go(next);
   }
+  function discardAndContinue() {
+    const next = destination;
+    setDestination(null);
+    setSettingsDirty(false);
+    // Native Quit may show Keep recording or fail to close the window. Discard
+    // must reset the actual form, not just its navigation guard's dirty flag.
+    setProfileRevision(revision => revision + 1);
+    if (next) go(next);
+  }
   const matches = navigation.filter(item => `${item.label} ${item.detail}`.toLowerCase().includes(quickSearch.trim().toLowerCase()));
   return <div className="app-shell polished-shell">
     <a className="skip-link" href="#workspace">Skip to workspace</a>
@@ -110,7 +120,7 @@ export default function App() {
       <main ref={workspace} id="workspace" tabIndex={-1}>
         {view === 'library' && <LibraryView onOpen={id => navigate({ view: 'review', id })} onSetup={() => navigate({ view: 'settings' })} busy={busy}/>}
         {view === 'review' && <ReviewView key={selected ?? 'empty'} id={selected} onBack={() => navigate({ view: 'library' })} onExports={() => navigate({ view: 'exports' })} busy={busy}/>}
-        {view === 'settings' && snapshot && <SettingsView settings={snapshot.settings} busy={busy} onDirtyChange={setSettingsDirty} onPendingChange={setSettingsPending}/>}
+        {view === 'settings' && snapshot && <SettingsView key={profileRevision} settings={snapshot.settings} busy={busy} onDirtyChange={setSettingsDirty} onPendingChange={setSettingsPending}/>}
         {view === 'exports' && <ExportsView busy={busy}/>}
         {view === 'diagnostics' && <DiagnosticsView/>}
         {view === 'settings' && !snapshot && <p role="status">Capture settings are available when the local application core is connected.</p>}
@@ -123,7 +133,7 @@ export default function App() {
       {snapshot && <div className="shortcut-reference"><span>Record / stop<kbd>{snapshot.settings.hotkey_record}</kbd></span><span>Live bookmark<kbd>{snapshot.settings.hotkey_bookmark}</kbd></span></div>}
     </Modal>
     <Modal open={!!destination} onClose={() => setDestination(null)} title="Keep your profile changes?" description="Your changes have not been saved. Stay to save them, or discard them and continue. Your recordings will not be changed.">
-      <div className="row wrap"><Button variant="primary" onClick={() => setDestination(null)}>Stay and edit</Button><Button onClick={() => { const next = destination; setDestination(null); setSettingsDirty(false); if (next) go(next); }}>Discard and continue</Button></div>
+      <div className="row wrap"><Button variant="primary" onClick={() => setDestination(null)}>Stay and edit</Button><Button onClick={discardAndContinue}>Discard and continue</Button></div>
     </Modal>
   </div>;
 }

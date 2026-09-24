@@ -49,6 +49,22 @@ it('guards explicit Quit and does not call native quit until discard is confirme
   fireEvent.click(screen.getByRole('button', { name: 'Discard and continue' }));
   await waitFor(() => expect(api.quit).toHaveBeenCalledTimes(1));
 });
+it('actually discards the form when native Quit returns without closing the window', async () => {
+  // Native request_quit can return before an OS dialog offers Keep recording.
+  vi.mocked(api.quit).mockResolvedValue(undefined);
+  mount(); await screen.findByRole('button', { name: 'Record' });
+  fireEvent.click(screen.getByRole('button', { name: 'Capture settings' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Compact quality' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Quit safely' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Discard and continue' }));
+  await waitFor(() => expect(api.quit).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole('button', { name: 'Balanced quality' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled();
+  expect(api.settings).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Library' }));
+  expect(await screen.findByRole('heading', { name: 'Your recordings' })).toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
 it('opens searchable quick navigation without starting a recording', async () => {
   mount(); await screen.findByRole('button', { name: 'Record' });
   fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
