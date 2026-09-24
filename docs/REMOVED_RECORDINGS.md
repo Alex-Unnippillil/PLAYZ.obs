@@ -47,3 +47,9 @@ cargo run -p playz-core --locked --bin generate-contracts -- --check
 ```
 
 The existing desktop and capture workflows remain merge gates. Native/media tests require the pinned runtime from `./scripts/bootstrap.ps1 -Native`. Installed tests run on a disposable account. Hosted Windows Server 2022 success is not clean offline Windows 11, real-game/audio/GPU, two-hour recording, full accessibility/scaling, supply-chain or signing acceptance. See `RELEASE_CHECKLIST.md`.
+
+## Installed-driver compatibility
+
+The first installed test of this increment completed import/play/export and entry removal, then failed when its driver assumed the Removed collection button supported `InvokePattern`. The failure screenshot shows the correctly emptied Active collection. WAI-ARIA `aria-pressed` buttons map to UI Automation's `TogglePattern`. The developer-only driver now selects actual Button controls and uses the supported Invoke or Toggle action; it logs each action and collects supported patterns on failure. No application semantics or assertions were removed. A rerun must prove the full remove/restart/restore path before merge; the earlier failed run is not passing evidence.
+
+References: https://www.w3.org/TR/core-aam-1.2/#role-map-button-pressed ; https://learn.microsoft.com/en-us/dotnet/api/system.windows.automation.automationelement.trygetcurrentpattern .

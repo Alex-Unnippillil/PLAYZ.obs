@@ -35,10 +35,39 @@ function Invoke-Element($Control) {
     if ([DateTime]::UtcNow -ge $deadline) { throw "Control did not become enabled: $($Control.Current.Name)" }
     Start-Sleep -Milliseconds 200
   }
-  $pattern = $Control.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
-  ([System.Windows.Automation.InvokePattern]$pattern).Invoke()
+  # WebView2 exposes aria-pressed collection buttons through TogglePattern,
+  # not InvokePattern. Use the actual supported UIA action, never a DOM override.
+  # https://www.w3.org/TR/core-aam-1.2/#role-map-button-pressed
+  $pattern = $null
+  if ($Control.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
+    ([System.Windows.Automation.InvokePattern]$pattern).Invoke()
+    return
+  }
+  if ($Control.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$pattern)) {
+    Write-Output "Installed UI: TogglePattern for $($Control.Current.Name)"
+    ([System.Windows.Automation.TogglePattern]$pattern).Toggle()
+    return
+  }
+  throw "No supported action pattern for $($Control.Current.Name) ($($Control.Current.ControlType.ProgrammaticName))"
 }
-function Invoke-Control([string]$Name) { Invoke-Element (Wait-Control $Name) }
+function Invoke-Control([string]$Name) {
+  Write-Output "Installed UI: activate $Name"
+  # Wait-Control can match headings/status text. Actions must match a button,
+  # not a same-named non-interactive accessibility node.
+  $condition = [System.Windows.Automation.AndCondition]::new(
+    (Named-Condition $Name),
+    [System.Windows.Automation.PropertyCondition]::new(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Button))
+  $deadline = [DateTime]::UtcNow.AddSeconds(30)
+  do {
+    $control = $script:window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    if ($null -ne $control) { Invoke-Element $control; return }
+    if ($script:appProcess.HasExited) { throw 'Installed application exited unexpectedly' }
+    Start-Sleep -Milliseconds 200
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw "Installed UI did not expose expected action button: $Name"
+}
 function Open-App {
   $script:appProcess = Start-Process -FilePath $executablePath -PassThru
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
@@ -65,7 +94,7 @@ function Save-Window([string]$Name) {
 }
 function Save-Controls($Root, [string]$Name) {
   $controls = $Root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-  @($controls | Select-Object -First 300 | ForEach-Object { [ordered]@{ name = $_.Current.Name; automation_id = $_.Current.AutomationId; control = $_.Current.ControlType.ProgrammaticName; enabled = $_.Current.IsEnabled } }) | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory "$Name.json")
+  @($controls | Select-Object -First 300 | ForEach-Object { [ordered]@{ name = $_.Current.Name; automation_id = $_.Current.AutomationId; control = $_.Current.ControlType.ProgrammaticName; enabled = $_.Current.IsEnabled; patterns = @($_.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }) } }) | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory "$Name.json")
 }
 function Import-Fixture {
   Write-Output 'Installed UI: opening native import picker'
