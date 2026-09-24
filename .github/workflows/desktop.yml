@@ -8,7 +8,8 @@ permissions:
   contents: read
 concurrency:
   group: desktop-${{ github.ref }}
-  cancel-in-progress: false
+  # Superseded PR packages are not release evidence. Keep main/manual builds serialized.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   frontend:
     runs-on: ubuntu-24.04
