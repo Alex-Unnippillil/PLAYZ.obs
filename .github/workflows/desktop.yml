@@ -23,6 +23,10 @@ jobs:
           node-version-file: .node-version
       - run: npm install --global pnpm@12.6.0
       - run: pnpm install --frozen-lockfile
+      - name: Documentation links, stack pins and gallery integrity
+        run: |
+          python scripts/check-docs.py --self-test
+          python scripts/check-docs.py
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build

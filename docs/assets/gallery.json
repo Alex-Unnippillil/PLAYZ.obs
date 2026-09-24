@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "source_commit": "0f190013823562cc61878079e286ac1cfa708433",
+  "kind": "renderer_fixture",
+  "notice": "UI fixture data only; not native capture or hardware evidence.",
+  "images": [
+    {
+      "path": "docs/assets/library-dark.png",
+      "sha256": "fecd794b133012125a59b8f89e27f4050a4fa24abc3d2d7a0021e83110d93ba5",
+      "bytes": 124167,
+      "git_blob_sha": "0af70774b60a87490d29567e643fe02bfb38fe75"
+    },
+    {
+      "path": "docs/assets/settings-light.png",
+      "sha256": "ae336746a56bf9f8b40b5d9fa48161dbb115013eadf475fe7422c6e04ec2246d",
+      "bytes": 172188,
+      "git_blob_sha": "61c45a066424b01de7e5d488d5e87d2f287d35d7"
+    },
+    {
+      "path": "docs/assets/saved-views.png",
+      "sha256": "74101dd7269ce9c616e97d66e6ce4815de62ba1e50584dcf14ea906033f74cd7",
+      "bytes": 126972,
+      "git_blob_sha": "5dc0bdf83807c1584257c6eb9d99dc10b04c02fc"
+    },
+    {
+      "path": "docs/assets/capture-budget.png",
+      "sha256": "641883572764ef5f0370ae66312624e1730d9b0b1f7ee08fe1d20ba930a74118",
+      "bytes": 157125,
+      "git_blob_sha": "36451b3301aa00beddcaa3e0433218233ae7672b"
+    }
+  ]
+}

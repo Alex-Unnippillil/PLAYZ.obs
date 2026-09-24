@@ -33,11 +33,14 @@ jobs:
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=960x540:rate=30 -t 4 -an -c:v libx264 -pix_fmt yuv420p -movflags +faststart apps/desktop/dist/fixture.mp4
       - name: Browser interaction, reflow and axe checks
         run: pnpm --dir apps/desktop exec playwright test --config playwright.ui.config.ts
+      - name: Collect successful README screenshots
+        run: python scripts/prepare-gallery.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: ui-evidence-${{ github.sha }}
           path: |
+            artifacts/gallery/
             artifacts/ui-report/
             artifacts/ui-results/
           retention-days: 14

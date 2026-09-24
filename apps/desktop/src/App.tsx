@@ -118,7 +118,7 @@ export default function App() {
       </header>
       <div className="global-messages"><Feedback error={state.error || action.error || snapshot?.error} message={action.message}/>{snapshot?.capture_warning && <div className="notice warning" role="status">{snapshot.capture_warning}</div>}{notice && <div className="notice row between" role="status">{notice}<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button></div>}</div>
       <main ref={workspace} id="workspace" tabIndex={-1}>
-        {view === 'library' && <LibraryView onOpen={id => navigate({ view: 'review', id })} onSetup={() => navigate({ view: 'settings' })} busy={busy}/>}
+        {view === 'library' && <LibraryView snapshot={snapshot} stale={!!state.error} onOpen={id => navigate({ view: 'review', id })} onSetup={() => navigate({ view: 'settings' })} busy={busy}/>}
         {view === 'review' && <ReviewView key={selected ?? 'empty'} id={selected} onBack={() => navigate({ view: 'library' })} onExports={() => navigate({ view: 'exports' })} busy={busy}/>}
         {view === 'settings' && snapshot && <SettingsView key={profileRevision} settings={snapshot.settings} busy={busy} onDirtyChange={setSettingsDirty} onPendingChange={setSettingsPending}/>}
         {view === 'exports' && <ExportsView busy={busy}/>}

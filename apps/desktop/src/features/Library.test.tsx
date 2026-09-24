@@ -11,6 +11,7 @@ vi.mock('../lib/api', () => ({ api: { list: vi.fn(), listRemoved: vi.fn(), resto
 // jsdom has no layout. Native virtualization is exercised separately by the
 // installed Windows workflow; these tests exercise queries and user actions.
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: ({ count }: { count: number }) => ({
+  measure: () => {},
   getTotalSize: () => count * 100,
   getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ index, start: index * 100, size: 100 })),
 }) }));
@@ -26,6 +27,7 @@ function mount(busy = false) {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  localStorage.clear();
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() });
   vi.mocked(api.list).mockResolvedValue({ items: [recording()], total: 1 });
   vi.mocked(api.listRemoved).mockResolvedValue({ items: [], total: 0 });
@@ -147,4 +149,54 @@ it('shows removed query failures without pretending the collection is empty', as
   mount(); fireEvent.click(screen.getByRole('button', { name: 'Show removed recordings' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not read catalog');
   expect(screen.queryByRole('heading', { name: 'No removed recordings' })).not.toBeInTheDocument();
+});
+
+it('saves and reapplies the exact search/favorite/collection criteria without modifying recordings', async () => {
+  mount(); await screen.findByRole('button', { name: 'Open Session one' });
+  fireEvent.change(screen.getByLabelText('Search recordings'), { target: { value: 'ace_100%' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Favorites' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save current library view' }));
+  fireEvent.change(screen.getByLabelText('View name'), { target: { value: 'My highlights' } });
+  fireEvent.click(screen.getByRole('dialog').querySelector('button[type=submit]')!);
+  expect(await screen.findByText('Saved view “My highlights” on this computer.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Apply saved view: My highlights' }));
+  await waitFor(() => expect(api.list).toHaveBeenLastCalledWith('ace_100%', 0, true));
+  expect(api.edit).not.toHaveBeenCalled(); expect(api.restore).not.toHaveBeenCalled();
+});
+it('loads saved views and display density on remount', async () => {
+  localStorage.setItem('playz.library.preferences.v1', JSON.stringify({ version: 1, density: 'compact', views: [{ id: 'saved', name: 'Removed favorites', query: 'ace', favorites: true, removed: true }] }));
+  mount(); expect(screen.getByRole('button', { name: 'Compact recording density' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: 'Apply saved view: Removed favorites' }));
+  await waitFor(() => expect(api.listRemoved).toHaveBeenLastCalledWith('ace', 0, true));
+  expect(screen.getByRole('button', { name: 'Show removed recordings' })).toHaveAttribute('aria-pressed', 'true');
+});
+it('preserves unsupported preference versions until an explicit reset', async () => {
+  const raw = '{"version":99,"views":[]}'; localStorage.setItem('playz.library.preferences.v1', raw);
+  mount(); expect(screen.getByRole('alert')).toHaveTextContent('Existing preferences are preserved');
+  fireEvent.click(screen.getByRole('button', { name: 'Compact recording density' }));
+  expect(localStorage.getItem('playz.library.preferences.v1')).toBe(raw);
+  fireEvent.click(screen.getByRole('button', { name: 'Manage saved library views' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reset view preferences' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reset preferences' }));
+  expect(localStorage.getItem('playz.library.preferences.v1')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Comfortable recording density' })).toHaveAttribute('aria-pressed', 'true');
+});
+it('reports storage failures without claiming the view was saved locally', async () => {
+  mount(); await screen.findByRole('button', { name: 'Open Session one' }); vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded'); });
+  fireEvent.click(screen.getByRole('button', { name: 'Save current library view' }));
+  fireEvent.change(screen.getByLabelText('View name'), { target: { value: 'Session only' } });
+  fireEvent.click(screen.getByRole('dialog').querySelector('button[type=submit]')!);
+  expect(screen.getByRole('alert')).toHaveTextContent('could not be saved');
+  expect(screen.getByRole('status')).toHaveTextContent('available for this session only');
+});
+it('focuses search with slash only outside text fields and dialogs', () => {
+  mount(); fireEvent.keyDown(window, { key: '/' }); expect(screen.getByLabelText('Search recordings')).toHaveFocus();
+  fireEvent.click(screen.getByRole('button', { name: 'Save current library view' }));
+  const input = screen.getByLabelText('View name'); input.focus(); fireEvent.keyDown(input, { key: '/' }); expect(input).toHaveFocus();
+});
+it('shows a persisted resume hint without inventing a completed-watching metric', async () => {
+  mount(); expect(await screen.findByText('Resume at 00:01')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Show removed recordings' }));
+  expect(screen.queryByText('Resume at 00:01')).not.toBeInTheDocument();
 });
