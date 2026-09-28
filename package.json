@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "pnpm --dir apps/desktop dev",
     "build": "pnpm --dir apps/desktop build",
-    "test": "pnpm --dir apps/desktop test",
+    "test": "pnpm --dir apps/desktop test && node --test scripts/check-bundle.test.mjs",
     "typecheck": "pnpm --dir apps/desktop typecheck"
   }
 }

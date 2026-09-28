@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { isTauri } from '@tauri-apps/api/core';
@@ -10,9 +10,13 @@ import { typingTarget } from './lib/experience';
 import { useAction } from './lib/hooks';
 import { Button, Feedback, Modal } from './components/ui';
 import { LibraryView } from './features/Library';
-import { SettingsView } from './features/Settings';
-import { ReviewView } from './features/Review';
-import { ExportsView, DiagnosticsView } from './features/Operations';
+import { PageBoundary, PageLoading } from './components/PageBoundary';
+
+// Local static chunks; no runtime CDN, server or remote code. Keep the shell eager.
+const SettingsView = lazy(() => import('./features/Settings').then(m => ({ default: m.SettingsView })));
+const ReviewView = lazy(() => import('./features/Review').then(m => ({ default: m.ReviewView })));
+const ExportsView = lazy(() => import('./features/Operations').then(m => ({ default: m.ExportsView })));
+const DiagnosticsView = lazy(() => import('./features/Operations').then(m => ({ default: m.DiagnosticsView })));
 
 type View = 'library' | 'review' | 'exports' | 'settings' | 'diagnostics';
 type Destination = { view: View; id?: string } | { quit: true };
@@ -118,12 +122,14 @@ export default function App() {
       </header>
       <div className="global-messages"><Feedback error={state.error || action.error || snapshot?.error} message={action.message}/>{snapshot?.capture_warning && <div className="notice warning" role="status">{snapshot.capture_warning}</div>}{notice && <div className="notice row between" role="status">{notice}<Button variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button></div>}</div>
       <main ref={workspace} id="workspace" tabIndex={-1}>
+        <PageBoundary key={`${view}:${selected ?? ""}`} onBack={() => { setSettingsPending(false); setSettingsDirty(false); setView('library'); }}><Suspense fallback={<PageLoading/>}>
         {view === 'library' && <LibraryView snapshot={snapshot} stale={!!state.error} onOpen={id => navigate({ view: 'review', id })} onSetup={() => navigate({ view: 'settings' })} busy={busy}/>}
         {view === 'review' && <ReviewView key={selected ?? 'empty'} id={selected} onBack={() => navigate({ view: 'library' })} onExports={() => navigate({ view: 'exports' })} busy={busy}/>}
         {view === 'settings' && snapshot && <SettingsView key={profileRevision} settings={snapshot.settings} busy={busy} onDirtyChange={setSettingsDirty} onPendingChange={setSettingsPending}/>}
         {view === 'exports' && <ExportsView busy={busy}/>}
         {view === 'diagnostics' && <DiagnosticsView/>}
         {view === 'settings' && !snapshot && <p role="status">Capture settings are available when the local application core is connected.</p>}
+        </Suspense></PageBoundary>
       </main>
       <footer className="status-bar"><span><HardDrive size={13} aria-hidden="true"/>{snapshot ? `${bytes(snapshot.free_bytes)} free at last check` : 'Local connection unavailable'}</span><span>Originals preserved · Offline workflow</span></footer>
     </div>

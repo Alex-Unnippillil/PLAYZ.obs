@@ -4,6 +4,12 @@
 
 The original tested installer, hashes, build source and independently passing installed-workflow run are recorded in [the historical local preview handoff](docs/LOCAL_PREVIEW_HANDOFF.md). That installer is from `553672a973f7d39131707045f75db4fcecaeb608` and does not contain subsequent code increments. New CI packages retain their own commit and hash; do not relabel an older artifact.
 
+## Review Studio and frontend stack increment
+
+Added an accessible Radix Slider 1.4.7 selection timeline, bounded local undo/redo, explicit loop preview and bookmark navigation/search. Secondary workspaces are deferred local chunks using React.lazy/Suspense with a page-level error boundary below recording controls. A manifest-based build gate checks deferred imports and raw/gzip sizes. No native recording code, schema, broad permissions or network behavior changed.
+
+See [Review Studio](docs/REVIEW_STUDIO.md) for behavior, dependency rationale and test entry points. Tests added in this increment require passing exact-commit CI before merge; historical installers below do not contain it. The final PR records completed workflow and installer identities. Production/hardware/signing gates remain unchanged.
+
 ## Development increments
 
 The receipt-backed export recovery increment was merged in PR #1 as `f4a6b5c87dee9d188077ea55fff98aa6ac8d035a`; its tested tree is `8d7f35cdeb90461ccb8ffa5535bf89641ad1b146`. Exact package evidence is recorded on that PR, separately from the historical installer below.

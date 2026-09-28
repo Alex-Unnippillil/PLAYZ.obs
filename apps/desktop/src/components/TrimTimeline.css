@@ -1,0 +1,25 @@
+.trim-timeline { margin: 14px 0 18px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.timeline-heading { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; font-size:13px; }
+.timeline-track-wrap { position:relative; margin:10px 10px 0; }
+.trim-slider { position:relative; display:flex; align-items:center; width:100%; height:44px; touch-action:none; user-select:none; }
+.trim-slider-track { position:relative; flex-grow:1; height:10px; border-radius:8px; background:var(--line); }
+.trim-slider-range { position:absolute; height:100%; border-radius:8px; background:var(--accent); }
+.trim-slider-thumb { display:block; width:18px; height:30px; border-radius:6px; border:2px solid var(--accent); background:var(--panel); box-shadow:0 0 0 3px var(--bg); }
+.trim-slider-thumb:focus-visible { outline:3px solid var(--text); outline-offset:5px; }
+.trim-slider[data-disabled] { opacity:.45; }
+.timeline-playhead { position:absolute; top:8px; bottom:8px; width:2px; background:var(--text); pointer-events:none; }
+.timeline-ruler { display:flex; justify-content:space-between; gap:8px; font-family:monospace; color:var(--muted); font-size:11px; }
+.trim-timeline p { margin:10px 0 0; }
+.trim-history { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin:12px 0; }
+.trim-history .row { gap:6px; }
+.bookmark-navigation { display:flex; align-items:end; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.bookmark-navigation label { flex:1; min-width:160px; margin:0; }
+.bookmark-navigation input { margin-top:5px; }
+.preview-controls { margin:14px 0 4px; }
+.preview-controls .check { font-size:13px; }
+.preview-state { padding:8px 10px; border-left:3px solid var(--accent); background:var(--panel); border-radius:4px; }
+.page-loading { padding:32px 12px; min-height:160px; }
+.page-loading p { color:var(--muted); }
+.page-failure { padding:24px; }
+@media (max-width:600px) { .trim-timeline { padding:12px; } .bookmark-row { flex-wrap:wrap; } .bookmark-seek { min-width:50%; } }
+@media (forced-colors:active) { .trim-slider-track { background:GrayText; } .trim-slider-range { background:Highlight; } .trim-slider-thumb { border-color:ButtonText; } .timeline-playhead { background:CanvasText; } }
