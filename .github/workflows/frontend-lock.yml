@@ -1,7 +1,7 @@
 name: Resolve frontend lock for review
 on:
   push:
-    branches: [work/local-recorder]
+    branches: [work/local-recorder, 'work/stack-*']
     paths: ['package.json', 'apps/desktop/package.json', 'pnpm-workspace.yaml', '.github/workflows/frontend-lock.yml']
   workflow_dispatch:
 permissions:
@@ -18,10 +18,16 @@ jobs:
         with:
           node-version-file: .node-version
       - run: npm install --global pnpm@12.6.0
+      - name: Record published slider identity for review
+        run: |
+          mkdir -p artifacts
+          npm view @radix-ui/react-slider@1.4.7 version license dist.integrity peerDependencies --json > artifacts/slider-registry.json
       - name: Resolve only; do not modify source or execute package lifecycle scripts
         run: pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: reviewed-frontend-lock
-          path: pnpm-lock.yaml
+          path: |
+            pnpm-lock.yaml
+            artifacts/slider-registry.json
           retention-days: 7
