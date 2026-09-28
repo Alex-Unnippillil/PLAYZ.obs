@@ -62,3 +62,80 @@ it('uses player-local shortcuts without intercepting text entry', async () => {
   expect(screen.getByRole('dialog', { name: 'Bookmark' })).toBeInTheDocument();
   expect(screen.getByLabelText('Position (seconds)')).toHaveValue(45);
 });
+
+it('undoes and redoes a complete preset, and branches history on numeric edits', async () => {
+  mount(); const quick = await screen.findByRole('button', { name: '15s around playhead' });
+  await waitFor(() => expect(quick).toBeEnabled()); fireEvent.click(quick);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo selection' }));
+  expect(screen.getByLabelText('Trim out seconds')).toHaveValue(120);
+  fireEvent.click(screen.getByRole('button', { name: 'Redo selection' }));
+  expect(screen.getByLabelText('Trim out seconds')).toHaveValue(15);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo selection' }));
+  fireEvent.change(screen.getByLabelText('Trim out seconds'), { target: { value: '35' } });
+  expect(screen.getByRole('button', { name: 'Redo selection' })).toBeDisabled();
+  expect(api.queue).not.toHaveBeenCalled();
+});
+it('exposes keyboard trim handles and disables them for invalid numeric edits', async () => {
+  mount(); const quick = await screen.findByRole('button', { name: '15s around playhead' });
+  await waitFor(() => expect(quick).toBeEnabled());
+  const handle = screen.getByRole('slider', { name: 'Selection start' });
+  handle.focus(); fireEvent.keyDown(handle, { key: 'ArrowRight' });
+  expect(screen.getByLabelText('Trim in seconds')).toHaveValue(0.001);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo selection' }));
+  expect(screen.getByLabelText('Trim in seconds')).toHaveValue(0);
+  fireEvent.change(screen.getByLabelText('Trim in seconds'), { target: { value: '' } });
+  expect(handle).toHaveAttribute('data-disabled');
+  expect(screen.getByRole('button', { name: 'Queue export' })).toBeDisabled();
+});
+it('filters bookmarks and builds one reversible clip selection around a moment', async () => {
+  vi.mocked(api.bookmarks).mockResolvedValue([
+    { id: 'one', recording_id: recordingFixture.id, position_ms: 40000, label: 'Objective', note: 'Review approach' },
+    { id: 'two', recording_id: recordingFixture.id, position_ms: 80000, label: 'Finish', note: '' },
+  ]);
+  mount(); const input = await screen.findByLabelText('Find bookmark');
+  fireEvent.change(input, { target: { value: 'approach' } });
+  expect(screen.queryByRole('button', { name: 'Clip 15 seconds around Finish' })).toBeNull();
+  const clip = screen.getByRole('button', { name: 'Clip 15 seconds around Objective' });
+  await waitFor(() => expect(clip).toBeEnabled()); fireEvent.click(clip);
+  expect(screen.getByLabelText('Trim in seconds')).toHaveValue(32.5);
+  expect(screen.getByLabelText('Trim out seconds')).toHaveValue(47.5);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo selection' }));
+  expect(screen.getByLabelText('Trim out seconds')).toHaveValue(120);
+  fireEvent.click(screen.getByRole('button', { name: 'Next bookmark' }));
+  expect((screen.getByLabelText(`Playback of ${recordingFixture.title}`) as HTMLVideoElement).currentTime).toBe(40);
+  expect(screen.getByRole('button', { name: 'Next bookmark' })).toBeDisabled();
+  fireEvent.change(input, { target: { value: 'absent' } });
+  expect(screen.getByRole('status')).toHaveTextContent('No bookmarks match');
+  expect(api.queue).not.toHaveBeenCalled();
+});
+it('loops only an explicitly previewed selection and stops when it is edited', async () => {
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  mount(); const preview = await screen.findByRole('button', { name: 'Preview interval' });
+  await waitFor(() => expect(preview).toBeEnabled());
+  const element = screen.getByLabelText(`Playback of ${recordingFixture.title}`) as HTMLVideoElement;
+  fireEvent.change(screen.getByLabelText('Trim in seconds'), { target: { value: '1' } });
+  fireEvent.change(screen.getByLabelText('Trim out seconds'), { target: { value: '2' } });
+  fireEvent.click(screen.getByLabelText('Loop selection'));
+  element.currentTime = 3; fireEvent.timeUpdate(element); expect(element.currentTime).toBe(3);
+  fireEvent.click(preview); expect(element.currentTime).toBe(1);
+  element.currentTime = 2.1; fireEvent.timeUpdate(element); expect(element.currentTime).toBe(1);
+  expect(play).toHaveBeenCalledTimes(2);
+  fireEvent.change(screen.getByLabelText('Trim out seconds'), { target: { value: '3' } });
+  expect(pause).toHaveBeenCalled(); expect(screen.queryByRole('button', { name: 'Stop preview' })).toBeNull();
+  element.currentTime = 4; fireEvent.timeUpdate(element); expect(element.currentTime).toBe(4);
+});
+it('stops a one-shot preview and reports playback failures', async () => {
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+  const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  mount(); const preview = await screen.findByRole('button', { name: 'Preview interval' });
+  await waitFor(() => expect(preview).toBeEnabled());
+  fireEvent.change(screen.getByLabelText('Trim out seconds'), { target: { value: '2' } });
+  fireEvent.click(preview);
+  const element = screen.getByLabelText(`Playback of ${recordingFixture.title}`) as HTMLVideoElement;
+  element.currentTime = 2.1; fireEvent.timeUpdate(element);
+  expect(pause).toHaveBeenCalled(); expect(screen.queryByRole('button', { name: 'Stop preview' })).toBeNull();
+  play.mockRejectedValue(new Error('decoder unavailable')); fireEvent.click(preview);
+  await screen.findByText(/decoder unavailable/);
+  expect(screen.queryByRole('button', { name: 'Stop preview' })).toBeNull();
+});

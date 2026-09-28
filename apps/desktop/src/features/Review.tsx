@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, BookmarkPlus, FolderOpen, RotateCcw, Pencil, Trash2, Scissors, Play } from 'lucide-react';
+import { ArrowLeft, BookmarkPlus, FolderOpen, RotateCcw, Pencil, Trash2, Scissors, Play, Undo2, Redo2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Bookmark, Details, ExportMode } from '../contracts';
 import { api } from '../lib/api';
 import { useAction } from '../lib/hooks';
@@ -9,6 +9,8 @@ import { duration, filenameError, trimError } from '../lib/format';
 import { clipAround, typingTarget } from '../lib/experience';
 import { Button, Empty, Feedback, Modal, PageTitle } from '../components/ui';
 import { Disclosure } from '../components/Disclosure';
+import { TrimTimeline } from '../components/TrimTimeline';
+import { newTrimHistory, trimReducer, type TrimRange } from '../lib/trimHistory';
 
 export function ReviewView({ id, onBack, onExports, busy }: { id: string | null; onBack: () => void; onExports: () => void; busy: boolean }) {
   const action = useAction();
@@ -17,8 +19,11 @@ export function ReviewView({ id, onBack, onExports, busy }: { id: string | null;
   const previewing = useRef(false);
   const [position, setPosition] = useState(0);
   const [playerError, setPlayerError] = useState<string | null>(null);
-  const [start, setStart] = useState(0);
-  const [end, setEnd] = useState(0);
+  const [history, dispatchTrim] = useReducer(trimReducer, 0, newTrimHistory);
+  const { start, end } = history.present;
+  const [loop, setLoop] = useState(false);
+  const [previewActive, setPreviewActive] = useState(false);
+  const [bookmarkSearch, setBookmarkSearch] = useState('');
   const [name, setName] = useState('clip');
   const [mode, setMode] = useState<ExportMode>('accurate');
   const [edit, setEdit] = useState<Details | null>(null);
@@ -31,12 +36,40 @@ export function ReviewView({ id, onBack, onExports, busy }: { id: string | null;
   const playback = useQuery({ queryKey: ['playback', id, item?.has_playback], queryFn: () => api.playback(id!), enabled: !!id && !!item?.has_playback, staleTime: Infinity });
   const bookmarks = useQuery({ queryKey: ['bookmarks', id], queryFn: () => api.bookmarks(id!), enabled: !!id, refetchInterval: 3000 });
   useEffect(() => {
-    setStart(0); setEnd((item?.duration_ms ?? 0) / 1000); setName(`clip-${id?.slice(0, 8) ?? 'local'}`);
+    dispatchTrim({ type: 'reset', duration: (item?.duration_ms ?? 0) / 1000 });
+    previewing.current = false; setPreviewActive(false); setName(`clip-${id?.slice(0, 8) ?? 'local'}`);
     setPlayerError(null); setRemoved(false); lastResume.current = 0;
   }, [id, item?.duration_ms]);
+  const moments = useMemo(() => (bookmarks.data ?? []).filter(b =>
+    Number.isFinite(b.position_ms) && b.position_ms >= 0 && b.position_ms <= (item?.duration_ms ?? 0)
+    && `${b.label} ${b.note}`.toLowerCase().includes(bookmarkSearch.trim().toLowerCase())
+  ).slice().sort((a, b) => a.position_ms - b.position_ms || a.id.localeCompare(b.id)), [bookmarks.data, bookmarkSearch, item?.duration_ms]);
+  const previousMoment = moments.slice().reverse().find(b => b.position_ms < position - 1);
+  const nextMoment = moments.find(b => b.position_ms > position + 1);
+  function stopPreview() {
+    if (previewing.current) video.current?.pause();
+    previewing.current = false; setPreviewActive(false);
+  }
+  function changeRange(patch: Partial<TrimRange>) {
+    stopPreview(); dispatchTrim({ type: 'set', patch });
+  }
+  const setStart = (value: number) => changeRange({ start: value });
+  const setEnd = (value: number) => changeRange({ end: value });
+  function selectAround(ms: number, seconds: number) {
+    const range = clipAround(ms, item?.duration_ms ?? 0, seconds);
+    if (range) changeRange(range);
+  }
+  function historyAction(type: 'undo' | 'redo') { stopPreview(); dispatchTrim({ type }); }
+  function previewBoundary(element: HTMLVideoElement) {
+    if (!previewing.current || trimError(start, end, (item?.duration_ms ?? 0) / 1000)) return;
+    if (loop) {
+      element.currentTime = start; setPosition(start * 1000);
+      void element.play().catch(e => { stopPreview(); setPlayerError(String(e)); });
+    } else stopPreview();
+  }
   function seek(ms: number) {
     if (video.current && Number.isFinite(ms)) {
-      previewing.current = false;
+      stopPreview();
       video.current.currentTime = Math.min(item?.duration_ms ?? 0, Math.max(0, ms)) / 1000;
       setPosition(video.current.currentTime * 1000);
     }
@@ -61,7 +94,7 @@ export function ReviewView({ id, onBack, onExports, busy }: { id: string | null;
     if (key === 'l') seek(ms + 5000);
     if (key === 'k') {
       if (video.current.paused) void video.current.play().catch(e => setPlayerError(String(e)));
-      else video.current.pause();
+      else { stopPreview(); video.current.pause(); }
     }
     if (key === 'i') setStart(Math.round(ms) / 1000);
     if (key === 'o') setEnd(Math.round(ms) / 1000);
@@ -81,18 +114,24 @@ export function ReviewView({ id, onBack, onExports, busy }: { id: string | null;
             onLoadedMetadata={e => { e.currentTarget.currentTime = Math.min(item.resume_ms / 1000, Math.max(0, e.currentTarget.duration - 0.05)); setPosition(e.currentTarget.currentTime * 1000); }}
             onError={() => setPlayerError('This playback copy could not be decoded. Open Recording tools and try Recover; the original remains unchanged.')}
             onPause={e => persistPosition(e.currentTarget.currentTime * 1000)}
+            onEnded={e => previewBoundary(e.currentTarget)}
             onTimeUpdate={e => {
               const ms = e.currentTarget.currentTime * 1000; setPosition(ms);
               if (Math.abs(ms - lastResume.current) >= 5000) { lastResume.current = ms; persistPosition(ms); }
-              if (previewing.current && ms >= end * 1000) { previewing.current = false; e.currentTarget.pause(); }
+              if (previewing.current && ms >= end * 1000) previewBoundary(e.currentTarget);
             }}/>
             : <div className="player-empty"><Play size={42} aria-hidden="true"/><h2>Playback is not ready</h2><p>Finish recording first. Recover prepares a compatible copy of interrupted or imported media.</p><Button disabled={busy} busy={action.pending} onClick={() => void action.run(() => api.recover(id), 'Playback preparation completed.')}>Recover / prepare playback</Button></div>}
         </div>
         <div className="player-tools"><span className="mono">{duration(position)} / {duration(item.duration_ms)}</span><label>Speed<select defaultValue="1" onChange={e => { if (video.current) video.current.playbackRate = Number(e.target.value); }}>{[0.5, 0.75, 1, 1.25, 1.5, 2].map(speed => <option key={speed} value={speed}>{speed}×</option>)}</select></label><Button disabled={!playback.data} onClick={bookmark}><BookmarkPlus size={17} aria-hidden="true"/>Add bookmark</Button></div>
         <p className="player-shortcuts muted">Focus the player: J / L seek 5s · K play / pause · I / O trim · B bookmark</p>
+        <TrimTimeline range={history.present} totalMs={item.duration_ms} positionMs={position} disabled={!playback.data}
+          onPreview={range => { stopPreview(); dispatchTrim({ type: 'preview', range }); }}
+          onCommit={() => dispatchTrim({ type: 'commit' })} onCancel={() => dispatchTrim({ type: 'cancel' })}/>
         <section className="panel"><div className="section-title"><h2>Bookmarks & moments</h2><span className="muted small">{bookmarks.data?.length ?? 0} saved</span></div>
           {bookmarks.data?.length === 0 && <p className="muted">Mark a moment to find it again or build a clip around it.</p>}
-          <div className="bookmark-list">{bookmarks.data?.map(b => <div className="bookmark-row" key={b.id}><button type="button" className="bookmark-seek" disabled={!playback.data} onClick={() => seek(b.position_ms)}><span className="mono">{duration(b.position_ms)}</span><span><strong>{b.label}</strong>{b.note && <span className="muted">{b.note}</span>}</span></button><Button variant="ghost" aria-label={`Edit bookmark ${b.label}`} onClick={() => { action.clear(); setMark({ ...b }); }}><Pencil size={15} aria-hidden="true"/></Button><Button variant="ghost" busy={action.pending} aria-label={`Delete bookmark ${b.label}`} onClick={() => void action.run(() => api.deleteBookmark(b.id), 'Bookmark deleted.')}><Trash2 size={15} aria-hidden="true"/></Button></div>)}</div>
+          {!!bookmarks.data?.length && <div className="bookmark-navigation"><label>Find bookmark<input type="search" maxLength={120} value={bookmarkSearch} onChange={e => setBookmarkSearch(e.target.value)} placeholder="Search labels and notes"/></label><Button aria-label="Previous bookmark" disabled={!playback.data || !previousMoment} onClick={() => previousMoment && seek(previousMoment.position_ms)}><ChevronLeft size={17} aria-hidden="true"/></Button><Button aria-label="Next bookmark" disabled={!playback.data || !nextMoment} onClick={() => nextMoment && seek(nextMoment.position_ms)}><ChevronRight size={17} aria-hidden="true"/></Button></div>}
+          {!!bookmarks.data?.length && moments.length === 0 && <p role="status" className="muted">No bookmarks match this search.</p>}
+          <div className="bookmark-list">{moments.map(b => <div className="bookmark-row" key={b.id}><button type="button" className="bookmark-seek" disabled={!playback.data} onClick={() => seek(b.position_ms)}><span className="mono">{duration(b.position_ms)}</span><span><strong>{b.label}</strong>{b.note && <span className="muted">{b.note}</span>}</span></button><Button variant="ghost" disabled={!playback.data} aria-label={`Clip 15 seconds around ${b.label}`} onClick={() => selectAround(b.position_ms, 15)}><Scissors size={15} aria-hidden="true"/></Button><Button variant="ghost" aria-label={`Edit bookmark ${b.label}`} onClick={() => { action.clear(); setMark({ ...b }); }}><Pencil size={15} aria-hidden="true"/></Button><Button variant="ghost" busy={action.pending} aria-label={`Delete bookmark ${b.label}`} onClick={() => void action.run(() => api.deleteBookmark(b.id), 'Bookmark deleted.')}><Trash2 size={15} aria-hidden="true"/></Button></div>)}</div>
           <p className="small muted">Manual bookmarks. League event ingestion is not enabled.</p>
         </section>
         <div className="row wrap"><Button busy={action.pending} onClick={() => void action.run(() => api.reveal(id))}><FolderOpen size={16} aria-hidden="true"/>Show original</Button><Button onClick={() => { action.clear(); setEdit({ title: item.title, favorite: item.favorite, notes: item.notes, tags: item.tags }); setTagText(item.tags.join(', ')); }}><Pencil size={16} aria-hidden="true"/>Title, tags & notes</Button></div>
@@ -104,8 +143,9 @@ export function ReviewView({ id, onBack, onExports, busy }: { id: string | null;
       <aside className="panel clip-panel">
         <div className="eyebrow">NON-DESTRUCTIVE EDIT</div><h2>Make a clip</h2>
         <div className="clip-length"><strong>{clipError ? '—' : duration((end - start) * 1000)}</strong><span className="small muted">selected · {mode === 'accurate' ? 'Accurate export' : 'Fast export'}</span></div>
-        <div className="clip-presets" role="group" aria-label="Quick clip selection">{[15, 30].map(seconds => <Button key={seconds} disabled={!playback.data || item.duration_ms < 250} title={`Select up to ${seconds} seconds around the playhead`} onClick={() => { const range = clipAround(position, item.duration_ms, seconds); if (range) { previewing.current = false; setStart(range.start); setEnd(range.end); } }}>{seconds}s around playhead</Button>)}<Button disabled={item.duration_ms < 250} onClick={() => { previewing.current = false; setStart(0); setEnd(item.duration_ms / 1000); }}>Full recording</Button></div>
-        <div className="trim-fields"><label>In (seconds)<input aria-label="Trim in seconds" type="number" step="0.001" min="0" value={Number.isFinite(start) ? start : ''} onChange={e => { previewing.current = false; setStart(e.target.valueAsNumber); }}/><Button variant="ghost" aria-label="Set trim in to playhead" disabled={!playback.data} onClick={() => setStart(Math.round(position) / 1000)}>Use playhead</Button></label><label>Out (seconds)<input aria-label="Trim out seconds" type="number" step="0.001" min="0" value={Number.isFinite(end) ? end : ''} onChange={e => { previewing.current = false; setEnd(e.target.valueAsNumber); }}/><Button variant="ghost" aria-label="Set trim out to playhead" disabled={!playback.data} onClick={() => setEnd(Math.round(position) / 1000)}>Use playhead</Button></label></div>
+        <div className="clip-presets" role="group" aria-label="Quick clip selection">{[15, 30].map(seconds => <Button key={seconds} disabled={!playback.data || item.duration_ms < 250} title={`Select up to ${seconds} seconds around the playhead`} onClick={() => selectAround(position, seconds)}>{seconds}s around playhead</Button>)}<Button disabled={item.duration_ms < 250} onClick={() => changeRange({ start: 0, end: item.duration_ms / 1000 })}>Full recording</Button></div>
+        <div className="trim-history"><span className="small muted">Selection history</span><div className="row"><Button aria-label="Undo selection" disabled={!history.past.length && !history.gesture} onClick={() => historyAction('undo')}><Undo2 size={16} aria-hidden="true"/>Undo</Button><Button aria-label="Redo selection" disabled={!history.future.length || !!history.gesture} onClick={() => historyAction('redo')}><Redo2 size={16} aria-hidden="true"/>Redo</Button></div></div>
+        <div className="trim-fields"><label>In (seconds)<input aria-label="Trim in seconds" type="number" step="0.001" min="0" value={Number.isFinite(start) ? start : ''} onChange={e => { setStart(e.target.valueAsNumber); }}/><Button variant="ghost" aria-label="Set trim in to playhead" disabled={!playback.data} onClick={() => setStart(Math.round(position) / 1000)}>Use playhead</Button></label><label>Out (seconds)<input aria-label="Trim out seconds" type="number" step="0.001" min="0" value={Number.isFinite(end) ? end : ''} onChange={e => { setEnd(e.target.valueAsNumber); }}/><Button variant="ghost" aria-label="Set trim out to playhead" disabled={!playback.data} onClick={() => setEnd(Math.round(position) / 1000)}>Use playhead</Button></label></div>
         <label>Clip name<input value={name} maxLength={100} onChange={e => setName(e.target.value)}/></label>
         <Disclosure title="Export options" description={mode === 'accurate' ? 'Accurate H.264 / AAC · default' : 'Fast copy · keyframe-aligned'}>
           <label>Export method<select value={mode} onChange={e => setMode(e.target.value as ExportMode)}><option value="accurate">Accurate · re-encode H.264 / AAC</option><option value="fast">Fast · keyframe-aligned copy</option></select></label>
@@ -113,9 +153,11 @@ export function ReviewView({ id, onBack, onExports, busy }: { id: string | null;
         </Disclosure>
         {mode === 'fast' && <p className="notice warning small">Fast mode may include footage before trim-in.</p>}
         {clipError && <p className="field-error" role="status">{clipError}</p>}
-        <Button disabled={!playback.data || !!clipError} onClick={() => { if (video.current) { video.current.currentTime = start; previewing.current = true; void video.current.play().catch(e => setPlayerError(String(e))); } }}><Play size={16} aria-hidden="true"/>Preview interval</Button>
+        <div className="preview-controls"><label className="check"><input type="checkbox" checked={loop} disabled={!playback.data || !!clipError} onChange={e => setLoop(e.target.checked)}/>Loop selection</label>{previewActive && <p className="small preview-state" role="status">{loop ? 'Looping selected interval' : 'Previewing selected interval'}</p>}</div>
+        <Button disabled={!playback.data || !!clipError} onClick={() => { if (video.current) { video.current.currentTime = start; previewing.current = true; setPreviewActive(true); void video.current.play().catch(e => { stopPreview(); setPlayerError(String(e)); }); } }}><Play size={16} aria-hidden="true"/>Preview interval</Button>
+        {previewActive && <Button onClick={stopPreview}>Stop preview</Button>}
         <Button variant="primary" disabled={!!clipError || !item.has_playback} busy={action.pending} onClick={() => void action.run(async () => { await api.queue({ recording_id: id, start_ms: start * 1000, end_ms: end * 1000, name, mode }); onExports(); })}><Scissors size={17} aria-hidden="true"/>Queue export</Button>
-        <p className="small muted">Clips get unique names in this recording’s exports folder. Encoding pauses during capture. No original is trimmed in place.</p>
+        <p className="small muted">Selection history is local to this review (up to 50 steps); navigating away resets it. Clips get unique names in this recording’s exports folder. Encoding pauses during capture. No original is trimmed in place.</p>
       </aside>
     </div>
     <Modal open={!!edit} onClose={() => { if (!action.pending) setEdit(null); }} title="Recording details" description="Update local metadata, not the encoded video.">{edit && <form onSubmit={e => { e.preventDefault(); void action.run(async () => { await api.edit(id, { ...edit, tags: tagText.split(',').map(s => s.trim()).filter(Boolean) }); setEdit(null); }); }}><label>Title<input required maxLength={180} value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })}/></label><label>Tags (comma-separated)<input value={tagText} onChange={e => setTagText(e.target.value)}/></label><label>Notes<textarea maxLength={10000} rows={5} value={edit.notes} onChange={e => setEdit({ ...edit, notes: e.target.value })}/></label><label className="check"><input type="checkbox" checked={edit.favorite} onChange={e => setEdit({ ...edit, favorite: e.target.checked })}/>Favorite</label><Feedback error={action.error}/><Button type="submit" variant="primary" busy={action.pending}>Save details</Button></form>}</Modal>

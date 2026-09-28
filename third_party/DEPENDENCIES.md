@@ -15,10 +15,17 @@ Version pins are the source of truth, not moving latest tags. Review security no
 | Vite / TypeScript / pnpm | Build; **8.3.0** / **7.0.2** / **12.6.0** | https://github.com/vitejs/vite ; https://github.com/microsoft/TypeScript ; https://github.com/pnpm/pnpm ; MIT/Apache-2.0 as applicable | No end-user Node server/toolchain |
 | TanStack Query / Virtual | Local queries and library virtualization; **5.103.2** / **3.14.13** | https://github.com/TanStack/query ; https://github.com/TanStack/virtual ; MIT | Bundled interface |
 | Tailwind / Radix Dialog / Lucide | Styles, accessible dialog primitive, icons; **4.3.3** / **1.1.23** / **1.47.0** | https://github.com/tailwindlabs/tailwindcss ; https://github.com/radix-ui/primitives ; https://github.com/lucide-icons/lucide ; MIT / ISC-family icon notices | Bundled interface; CSS tooling build-only |
+| Radix Slider | Keyboard/pointer two-thumb trim control; **1.4.7**, exact resolved graph in `pnpm-lock.yaml` | https://github.com/radix-ui/primitives ; MIT; published peer range accepts React 19 | Bundled Review workspace |
 | RHF / Zod | Form/runtime validation; **7.88.0** / **4.6.5** | https://github.com/react-hook-form/react-hook-form ; https://github.com/colinhacks/zod ; MIT | Bundled interface |
 | Windows / WebView2 / MSVC runtime / GPU drivers | Platform, browser playback and native binary prerequisites | Microsoft/vendor terms; **not open-source components** | Permitted runtime components; Windows/drivers supplied by the system |
 
 `Cargo.lock` and `pnpm-lock.yaml` enumerate transitive versions. `runtime/provenance.json` records native file hashes and sizes. `runtime/notices` contains OBS and JSON license text and actual FFmpeg configuration/license output. Native plugins are explicitly allowlisted; browser/websocket/virtual-camera plugins are not enabled by this host.
+
+## Review Studio dependency change
+
+Only `@radix-ui/react-slider` 1.4.7 and its required Radix transitive modules were added for this increment. Existing direct version pins and all Rust/native pins remain unchanged. Registry version/license/peer metadata and the lock graph were resolved using the pinned Node/pnpm toolchain with lifecycle scripts disabled. The reviewed lock was committed; normal builds use frozen installation and the existing vulnerability audit. This is not a claim that every existing dependency is the newest upstream release or that the full release SBOM is complete.
+
+The frontend now uses React.lazy/Suspense and Vite's generated manifest rather than adding a router, another state manager, a chart library or a runtime server. Selection history is a bounded pure reducer. Bundle inspection uses Node's standard library on the build machine only. See [Review Studio](../docs/REVIEW_STUDIO.md).
 
 ## Update policy
 

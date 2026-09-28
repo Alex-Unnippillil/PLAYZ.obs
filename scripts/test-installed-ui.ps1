@@ -149,6 +149,7 @@ function Verify-Playback {
   throw 'The packaged HTML video playhead did not advance on the real MP4 playback asset'
 }
 . "$PSScriptRoot/test-workspace-installed.ps1"
+. "$PSScriptRoot/test-review-installed.ps1"
 try {
   Open-App
   Save-Window 'library'
@@ -180,6 +181,7 @@ try {
   Invoke-Control 'Export options'
   Invoke-Control '15s around playhead'
   Verify-Playback
+  Test-ReviewStudio
   Invoke-Control 'Queue export'
   Wait-Control 'Show clip' | Out-Null
   Invoke-Control 'Filter exports: Completed'
@@ -226,7 +228,7 @@ try {
   Write-Output 'Installed UI: removal survived restart; restored recording and dependent export remain accessible'
   Invoke-Control 'Quit safely'
   if (-not $script:appProcess.WaitForExit(20000)) { throw 'Restarted application did not quit' }
-  [ordered]@{ schema_version = 1; installed_launch = $true; native_state_settings = $true; advanced_settings_disclosure = $true; unsaved_profile_guard = $true; preset_saved_natively = $true; diagnostics_view = $true; native_picker_import = $true; quick_clip_selection = $true; export_options_disclosure = $true; completed_export_filter = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; removed_entry_persisted_after_restart = $true; removed_entry_restored_from_library = $true; dependent_export_preserved = $true; saved_view_persisted_after_restart = $true; density_persisted_after_restart = $true; saved_view_applied_to_native_library = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
+  [ordered]@{ schema_version = 1; visual_trim_controls = $true; selection_undo_redo = $true; explicit_loop_on_actual_media = $true; stop_preview_control = $true; installed_launch = $true; native_state_settings = $true; advanced_settings_disclosure = $true; unsaved_profile_guard = $true; preset_saved_natively = $true; diagnostics_view = $true; native_picker_import = $true; quick_clip_selection = $true; export_options_disclosure = $true; completed_export_filter = $true; packaged_video_playhead_advanced = $true; native_ui_export_completed = $true; single_instance = $true; persisted_library_after_restart = $true; removed_entry_persisted_after_restart = $true; removed_entry_restored_from_library = $true; dependent_export_preserved = $true; saved_view_persisted_after_restart = $true; density_persisted_after_restart = $true; saved_view_applied_to_native_library = $true; classification = 'Hosted packaged workflow, not clean Windows 11 offline or game acceptance' } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $EvidenceDirectory 'installed-smoke.json')
 } catch {
   if ($null -ne $script:window) {
     try {

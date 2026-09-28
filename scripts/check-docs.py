@@ -16,7 +16,7 @@ import tomllib
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCS = ('README.md', 'docs/WORKSPACE_GUIDE.md')
+DOCS = ('README.md', 'docs/WORKSPACE_GUIDE.md', 'docs/REVIEW_STUDIO.md')
 EXPECTED_IMAGES = {'library-dark.png', 'saved-views.png', 'settings-light.png', 'capture-budget.png'}
 
 
@@ -39,7 +39,7 @@ def check_pins(root: Path, readme: str) -> int:
     npm = {**package['dependencies'], **package['devDependencies']}
     aliases = {'react': 'React', 'typescript': 'TypeScript', '@tauri-apps/api': 'JavaScript API',
                'vite': 'Vite', 'tailwindcss': 'Tailwind CSS', '@radix-ui/react-dialog': 'Radix Dialog',
-               'lucide-react': 'Lucide React', '@tanstack/react-query': 'TanStack Query',
+               '@radix-ui/react-slider': 'Radix Slider', 'lucide-react': 'Lucide React', '@tanstack/react-query': 'TanStack Query',
                '@tanstack/react-virtual': 'Virtual', 'react-hook-form': 'React Hook Form',
                'zod': 'Zod', 'vitest': 'Vitest', '@testing-library/react': 'Testing Library React',
                '@playwright/test': 'Playwright', '@axe-core/playwright': 'axe-core Playwright'}

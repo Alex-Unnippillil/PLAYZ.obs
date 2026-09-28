@@ -76,6 +76,12 @@ Presets fill only the quality fields; **Save profile** makes them effective. The
 
 These are ordinary playback/time-selection controls, not frame-accurate stepping. Live bookmark time is based on encoded-frame elapsed time, not independently calibrated media PTS.
 
+### Review Studio: select, preview and refine
+
+The review page now has a **two-handle selection timeline**, keyboard-adjustable trim boundaries, **Undo/Redo** for up to 50 local selection changes, and an explicit **Loop selection** preview. A drag is one history step. Blank or invalid numeric timestamps remain visible and block export rather than being silently repaired. Choosing Loop does not start playback; press Preview interval, and use Stop preview to finish.
+
+Find bookmarks by label or note, jump to the previous/next matching moment, or select a 15-second interval around a bookmark. No export is queued automatically. These are ordinary timestamp-based WebView2 controls, not decoded-frame stepping, an audio waveform, or a guarantee of frame-exact looping. Selection history resets when leaving a review; video files never change. See [Review Studio and stack decisions](docs/REVIEW_STUDIO.md).
+
 ## Technology stack
 
 Versions below are **repository pins**, not a claim that each is the newest upstream release. The documentation check verifies this table against manifests. Lockfiles and the [dependency register](third_party/DEPENDENCIES.md) retain the full dependency graph and licensing detail.
@@ -86,7 +92,7 @@ Versions below are **repository pins**, not a claim that each is the newest upst
 | Desktop shell | Tauri **2.11.6**; JavaScript API **2.11.1** | Narrow native commands, tray, single instance and scoped media assets; shipped |
 | UI | React **19.3.0**; TypeScript **7.0.2** | Typed, original interface; static UI ships, compiler does not |
 | Build and styling | Vite **8.3.0**; Tailwind CSS **4.3.3** | Compiled assets; no Node server or remote CSS at runtime |
-| Accessible primitives/icons | Radix Dialog **1.1.23**; Lucide React **1.47.0** | Dialog focus semantics and consistent icons; shipped UI dependencies |
+| Accessible primitives/icons | Radix Dialog **1.1.23**; Radix Slider **1.4.7**; Lucide React **1.47.0** | Dialog focus, multi-thumb timeline semantics and consistent icons; shipped UI dependencies |
 | Local async data | TanStack Query **5.103.2**; Virtual **3.14.13** | Local-command caching and bounded visible rows; shipped |
 | Forms | React Hook Form **7.88.0**; Zod **4.6.5** | Renderer validation; Rust remains authoritative |
 | Native async core | Rust **1.98.1**; Tokio **1.53.1** | Supervision, media jobs and cancellation; compiled native code |
@@ -103,6 +109,12 @@ Versions below are **repository pins**, not a claim that each is the newest upst
 Source of truth: [frontend manifest](apps/desktop/package.json), [Rust workspace](Cargo.toml), [core manifest](crates/playz-core/Cargo.toml), [Tauri manifest](apps/desktop/src-tauri/Cargo.toml), [native checksum lock](third_party/native-lock.json), [Rust toolchain](rust-toolchain.toml) and [Node pin](.node-version).
 
 **Platform dependencies:** Windows, Microsoft WebView2 and GPU drivers are proprietary. The project does not claim an entirely open-source runtime. The installer uses Tauri's full `offlineInstaller` WebView2 mode, not a first-launch bootstrap download. The actual SQLite runtime is queried in diagnostics/tests rather than inferred from the wrapper version; historical native evidence reports 3.53.2, and startup enforces the minimum patched version in the core.
+
+### Frontend loading and size budgets
+
+The Library and capture controls remain in the initial shell. Review, Settings and Operations load on demand using **React.lazy/Suspense**, from JavaScript chunks already bundled inside the installer. No runtime CDN or network dependency is added. A page-scoped error boundary provides a return-to-Library action while leaving recording controls available. Reloading the interface is explicit, not an automatic recovery loop.
+
+Every frontend build generates a Vite module manifest and runs [the dependency-free bundle check](scripts/check-bundle.mjs). It verifies that secondary workspaces are actually deferred and enforces raw-JavaScript limits of 480 KiB for the initial static import closure, 450 KiB per chunk, and 800 KiB total. `artifacts/bundle-report.json` records raw/gzip byte counts. These are build budgets, **not measured startup latency, RAM use, capture overhead or FPS results**. Browser and installed-app tests exercise deferred navigation separately.
 
 ## Architecture
 
@@ -214,7 +226,7 @@ The native bootstrap verifies upstream checksums and compiles **our thin C++ ada
 | Installed desktop | `./scripts/test-installed.ps1` | Real NSIS/WebView2/native commands, playback/export and restart persistence on the tested Windows environment |
 | Documentation | `python scripts/check-docs.py` | Local links, pinned stack values, gallery provenance/image integrity and required diagram blocks |
 
-See [PR #4](https://github.com/Alex-Unnippillil/PLAYZ.obs/pull/4) for this increment's exact final check results and artifact handoff. No passing badge or test count here is inferred from the existence of test code. The [Actions workflows](.github/workflows) preserve build/test evidence; the [release checklist](RELEASE_CHECKLIST.md) remains the production gate.
+[PR #4](https://github.com/Alex-Unnippillil/PLAYZ.obs/pull/4) records the historical saved-workspace increment. The Review Studio pull request records its own exact final source, check results and fresh artifact handoff; earlier installers do not contain the new review controls. No passing badge or test count here is inferred from the existence of test code. The [Actions workflows](.github/workflows) preserve build/test evidence; the [release checklist](RELEASE_CHECKLIST.md) remains the production gate.
 
 ## Scope and release readiness
 
